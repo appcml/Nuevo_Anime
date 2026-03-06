@@ -1,0 +1,43 @@
+# Variables de entorno (NUNCA subir estas)
+.env
+.env.local
+.env.*.local
+
+# Python cache y compilados
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+Python/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Historial del bot (se regenera)
+historial_anime.json
+
+# Logs
+*.log
+
+# IDEs y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
