@@ -2,7 +2,7 @@ name: 🤖 Bot Nuevo Anime
 
 on:
   schedule:
-    # Ejecuta cada 4 horas
+    # Ejecuta cada 4 horas (puedes cambiarlo)
     - cron: '0 */4 * * *'
   workflow_dispatch:  # Permite ejecutar manualmente
 
