@@ -29,6 +29,7 @@ print("="*60)
 print("🎌 BOT NUEVO ANIME - Generador de Contenido")
 print(f"⏰ {datetime.now().strftime('%H:%M:%S')}")
 print(f"📄 Página ID: {FB_PAGE_ID}")
+print(f"🔑 Token configurado: {'Sí' if FB_ACCESS_TOKEN else 'No'}")
 print("="*60)
 
 # ==================== HISTORIAL ====================
@@ -50,7 +51,6 @@ def guardar_historial(url, titulo, personaje=''):
         historial['personajes'].append(personaje.lower())
     historial['ultima_publicacion'] = datetime.now().isoformat()
     
-    # Mantener solo últimos 500
     for key in ['urls', 'titulos', 'personajes']:
         if key in historial:
             historial[key] = historial[key][-500:]
@@ -63,7 +63,6 @@ def guardar_historial(url, titulo, personaje=''):
         print(f"❌ Error guardando historial: {e}")
 
 def ya_publicado(titulo, personaje=''):
-    """Verifica si ya publicamos sobre este tema"""
     titulo_simple = re.sub(r'[^\w]', '', titulo.lower())[:30]
     
     for t in historial.get('titulos', []):
@@ -83,9 +82,7 @@ def ya_publicado(titulo, personaje=''):
 # ==================== APIS DE ANIME ====================
 
 def buscar_anime_jikan_random():
-    """Obtiene anime aleatorio de Jikan API (MyAnimeList) - GRATIS"""
     try:
-        # IDs populares de animes
         popular_anime_ids = [
             1, 21, 5114, 30276, 11757, 31964, 1535, 32281, 9253, 11061,
             20, 30, 47, 57, 199, 200, 232, 233, 235, 245, 288, 358,
@@ -112,9 +109,7 @@ def buscar_anime_jikan_random():
     return None
 
 def buscar_personaje_jikan():
-    """Busca personaje aleatorio popular"""
     try:
-        # IDs de personajes icónicos
         char_ids = [
             1, 2, 3, 5, 6, 8, 9, 11, 13, 14, 15, 16, 17, 18, 20, 22, 23, 25, 27, 28,
             40, 45, 50, 62, 71, 80, 91, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120,
@@ -140,7 +135,6 @@ def buscar_personaje_jikan():
     return None
 
 def buscar_anilist_trending():
-    """Usa AniList GraphQL - GRATIS"""
     query = """
     query {
       Page(page: 1, perPage: 20) {
@@ -186,7 +180,6 @@ def buscar_anilist_trending():
 # ==================== GENERADORES DE CONTENIDO ====================
 
 def generar_contenido_invocacion():
-    """Genera contenido tipo 'Invocación' (estilo Baku)"""
     print("\n🎯 Generando contenido tipo INVOCACIÓN...")
     
     anime = buscar_anilist_trending()
@@ -219,7 +212,6 @@ def generar_contenido_invocacion():
     )
 
 def generar_contenido_personaje():
-    """Genera ficha de personaje"""
     print("\n🎯 Generando contenido tipo PERSONAJE...")
     
     personaje = buscar_personaje_jikan()
@@ -232,7 +224,6 @@ def generar_contenido_personaje():
     if ya_publicado(nombre, nombre):
         return None
     
-    # Buscar anime al que pertenece
     animes = personaje.get('anime', [])
     anime_nombre = ''
     if animes:
@@ -247,10 +238,8 @@ def generar_contenido_personaje():
     )
 
 def generar_contenido_retro():
-    """Genera contenido de anime clásico"""
     print("\n🎯 Generando contenido tipo RETRO...")
     
-    # IDs de animes clásicos
     retro_ids = [1, 30, 47, 57, 199, 200, 232, 235, 288, 358, 422, 431, 529, 552, 568]
     
     try:
@@ -278,7 +267,7 @@ def generar_contenido_retro():
         return None
 
 def generar_texto_ia(tipo, **kwargs):
-    """Genera texto usando OpenRouter"""
+    """Genera texto usando OpenRouter con modelos actualizados"""
     
     if not OPENROUTER_API_KEY:
         print("   ⚠️ No hay OPENROUTER_API_KEY, usando plantilla")
@@ -351,15 +340,16 @@ REGLAS:
     
     prompt = prompts.get(tipo, prompts['personaje'])
     
+    # Modelos actualizados que funcionan en OpenRouter (gratuitos)
     modelos = [
-        "mistralai/mistral-7b-instruct:free",
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "qwen/qwen-2-7b-instruct:free"
+        "google/gemma-2-9b-it:free",
+        "microsoft/phi-3-medium-128k-instruct:free",
+        "nvidia/llama-3.1-nemotron-70b-instruct:free"
     ]
     
     for modelo in modelos:
         try:
-            print(f"   🤖 Intentando con {modelo.split('/')[1]}...")
+            print(f"   🤖 Intentando con {modelo}...")
             response = requests.post(
                 'https://openrouter.ai/api/v1/chat/completions',
                 headers={
@@ -426,8 +416,8 @@ Una invocación temible... pero peligrosa incluso para quien la invoca 😰
 #Anime #{anime.replace(' ', '')} #Invocación #NuevoAnime 🔥"""
     
     elif tipo == 'personaje':
-        nombre = kwargs.get('nombre_personaje', 'Personaje')
-        anime = kwargs.get('nombre_anime', 'Anime')
+        nombre = kwargs.get('nombre_personaje', '???')
+        anime = kwargs.get('nombre_anime', '???')
         
         texto = f"""👤 {nombre} de {anime}
 
@@ -442,9 +432,9 @@ Una invocación temible... pero peligrosa incluso para quien la invoca 😰
 
 #Anime #{anime.replace(' ', '')} #Personaje #NuevoAnime 👑"""
     
-    else:  # retro
-        anime = kwargs.get('nombre_anime', 'Anime Clásico')
-        year = kwargs.get('year', '90s')
+    else:
+        anime = kwargs.get('nombre_anime', '???')
+        year = kwargs.get('year', '???')
         
         texto = f"""📼 {anime} ({year}) 🎞️
 
@@ -468,7 +458,6 @@ Un clásico que definió una época dorada del anime ⭐
 # ==================== DESCARGA Y PUBLICACIÓN ====================
 
 def descargar_imagen(url):
-    """Descarga y optimiza imagen"""
     if not url or not str(url).startswith('http'):
         print("   ⚠️ URL de imagen inválida")
         return None
@@ -480,14 +469,11 @@ def descargar_imagen(url):
         if resp.status_code == 200:
             img = Image.open(BytesIO(resp.content))
             
-            # Convertir a RGB si es necesario
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
             
-            # Redimensionar manteniendo proporción
             img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
             
-            # Guardar con calidad alta
             path = f'/tmp/anime_{hashlib.md5(str(url).encode()).hexdigest()[:8]}.jpg'
             img.save(path, 'JPEG', quality=90, optimize=True)
             
@@ -502,7 +488,7 @@ def descargar_imagen(url):
     return None
 
 def publicar_facebook(texto, img_path):
-    """Publica en Facebook"""
+    """Publica en Facebook usando el método correcto para páginas"""
     
     if not FB_ACCESS_TOKEN:
         print("❌ Falta FB_ACCESS_TOKEN")
@@ -519,6 +505,7 @@ def publicar_facebook(texto, img_path):
     print(f"   {'='*50}")
     
     try:
+        # MÉTODO CORREGIDO: Usar /photos para publicar con imagen
         url = f"https://graph.facebook.com/v18.0/{FB_PAGE_ID}/photos"
         
         with open(img_path, 'rb') as f:
@@ -529,6 +516,9 @@ def publicar_facebook(texto, img_path):
             }
             
             print(f"   📤 Publicando en Facebook...")
+            print(f"   🔗 URL: {url}")
+            print(f"   📄 Page ID: {FB_PAGE_ID}")
+            
             resp = requests.post(url, files=files, data=data, timeout=60)
             result = resp.json()
             
@@ -541,15 +531,22 @@ def publicar_facebook(texto, img_path):
                 error = result.get('error', {})
                 error_msg = error.get('message', str(result))
                 error_code = error.get('code', 'unknown')
-                print(f"   ❌ Error Facebook ({error_code}): {error_msg}")
+                error_subcode = error.get('error_subcode', 'none')
                 
-                # Si es error de token, dar instrucciones específicas
-                if error_code == 190:
-                    print("   💡 El token expiró. Genera uno nuevo en:")
-                    print("   https://developers.facebook.com/tools/explorer/")
+                print(f"   ❌ Error Facebook ({error_code}/{error_subcode}): {error_msg}")
+                
+                # Mensajes de ayuda según el error
+                if error_code == 200:
+                    print("   💡 Solución: El token necesita permiso 'pages_manage_posts'")
+                    print("   💡 Ve a: https://developers.facebook.com/tools/explorer/")
+                    print("   💡 Asegúrate de seleccionar 'Página' y no 'Usuario'")
+                elif error_code == 190:
+                    print("   💡 El token expiró. Genera uno nuevo.")
                 
     except Exception as e:
         print(f"   ❌ Error publicando: {e}")
+        import traceback
+        traceback.print_exc()
     
     return False
 
@@ -562,13 +559,17 @@ def main():
         print("   Configúralo en GitHub Secrets o variable de entorno")
         return False
     
-    if not OPENROUTER_API_KEY:
-        print("⚠️ ADVERTENCIA: No hay OPENROUTER_API_KEY")
-        print("   Se usarán plantillas manuales en lugar de IA")
+    if not FB_PAGE_ID:
+        print("❌ ERROR: Falta FB_PAGE_ID")
+        return False
+    
+    print(f"\n🔑 Configuración:")
+    print(f"   FB_PAGE_ID: {FB_PAGE_ID}")
+    print(f"   FB_ACCESS_TOKEN: {'Configurado (' + FB_ACCESS_TOKEN[:20] + '...)' if FB_ACCESS_TOKEN else 'No configurado'}")
+    print(f"   OPENROUTER_API_KEY: {'Configurado' if OPENROUTER_API_KEY else 'No configurado (usando plantillas)'}")
     
     print("\n🎲 Seleccionando tipo de contenido...")
     
-    # Estrategias de contenido
     estrategias = [
         ('invocacion', generar_contenido_invocacion),
         ('personaje', generar_contenido_personaje),
@@ -593,13 +594,11 @@ def main():
                 print("   ⏭️ Ya publicado anteriormente...")
                 continue
             
-            # Descargar imagen
             img_path = descargar_imagen(resultado['imagen'])
             if not img_path:
                 print("   ⏭️ No se pudo obtener imagen...")
                 continue
             
-            # Publicar
             if publicar_facebook(resultado['texto'], img_path):
                 guardar_historial(
                     resultado['imagen'], 
@@ -607,7 +606,6 @@ def main():
                     resultado['titulo']
                 )
                 
-                # Limpiar archivo temporal
                 try:
                     os.remove(img_path)
                     print(f"   🗑️ Imagen temporal eliminada")
@@ -619,7 +617,6 @@ def main():
                 print(f"{'='*60}")
                 return True
             
-            # Limpiar si falló
             try:
                 os.remove(img_path)
             except:
