@@ -34,7 +34,7 @@ print("="*60)
 
 # ==================== HISTORIAL ====================
 
-historial = {'urls': [], 'titulos': [], 'personajes': [], 'ultima_publicacion': None}
+historial = {'urls': [], 'titulos': [], 'personajes': [], 'ultima_publicacion': None, 'ultimo_estado': None}
 
 if os.path.exists(HISTORIAL_FILE):
     try:
@@ -44,12 +44,13 @@ if os.path.exists(HISTORIAL_FILE):
     except Exception as e:
         print(f"⚠️ Error cargando historial: {e}")
 
-def guardar_historial(url, titulo, personaje=''):
+def guardar_historial(url, titulo, personaje='', estado='publicado'):
     historial['urls'].append(url)
     historial['titulos'].append(titulo[:100])
     if personaje:
         historial['personajes'].append(personaje.lower())
     historial['ultima_publicacion'] = datetime.now().isoformat()
+    historial['ultimo_estado'] = estado
     
     for key in ['urls', 'titulos', 'personajes']:
         if key in historial:
@@ -58,7 +59,7 @@ def guardar_historial(url, titulo, personaje=''):
     try:
         with open(HISTORIAL_FILE, 'w', encoding='utf-8') as f:
             json.dump(historial, f, ensure_ascii=False, indent=2)
-        print(f"💾 Historial guardado")
+        print(f"💾 Historial guardado (estado: {estado})")
     except Exception as e:
         print(f"❌ Error guardando historial: {e}")
 
@@ -557,11 +558,30 @@ def main():
     if not FB_ACCESS_TOKEN:
         print("❌ ERROR: Falta FB_ACCESS_TOKEN")
         print("   Configúralo en GitHub Secrets o variable de entorno")
+        guardar_historial('', 'Sin ejecución - Falta token', '', 'error_sin_token')
         return False
     
     if not FB_PAGE_ID:
         print("❌ ERROR: Falta FB_PAGE_ID")
+        guardar_historial('', 'Sin ejecución - Falta page ID', '', 'error_sin_pageid')
         return False
+    
+    # DEBUG: Verificar token con Facebook
+    try:
+        debug_url = f"https://graph.facebook.com/debug_token?input_token={FB_ACCESS_TOKEN}&access_token={FB_ACCESS_TOKEN}"
+        debug_resp = requests.get(debug_url)
+        debug_data = debug_resp.json()
+        print(f"🔍 Token info: {debug_data.get('data', {})}")
+        
+        # Verificar si el token es válido
+        token_data = debug_data.get('data', {})
+        if not token_data.get('is_valid'):
+            print("❌ ERROR: El token de Facebook no es válido")
+            guardar_historial('', 'Token inválido', '', 'error_token_invalido')
+            return False
+            
+    except Exception as e:
+        print(f"⚠️ No se pudo verificar token: {e}")
     
     print(f"\n🔑 Configuración:")
     print(f"   FB_PAGE_ID: {FB_PAGE_ID}")
@@ -597,13 +617,15 @@ def main():
             img_path = descargar_imagen(resultado['imagen'])
             if not img_path:
                 print("   ⏭️ No se pudo obtener imagen...")
+                guardar_historial(resultado['imagen'], resultado['titulo'], resultado['titulo'], 'error_sin_imagen')
                 continue
             
             if publicar_facebook(resultado['texto'], img_path):
                 guardar_historial(
                     resultado['imagen'], 
                     resultado['titulo'],
-                    resultado['titulo']
+                    resultado['titulo'],
+                    'exitoso'
                 )
                 
                 try:
@@ -616,6 +638,14 @@ def main():
                 print("✅ ÉXITO - Publicación completada")
                 print(f"{'='*60}")
                 return True
+            else:
+                # Si falla la publicación, guardar en historial de todos modos
+                guardar_historial(
+                    resultado['imagen'], 
+                    resultado['titulo'],
+                    resultado['titulo'],
+                    'fallo_publicacion'
+                )
             
             try:
                 os.remove(img_path)
@@ -629,6 +659,7 @@ def main():
             continue
     
     print("\n❌ No se pudo generar contenido nuevo después de intentar todas las opciones")
+    guardar_historial('', 'Sin contenido nuevo', '', 'sin_contenido')
     return False
 
 if __name__ == "__main__":
@@ -638,4 +669,9 @@ if __name__ == "__main__":
         print(f"\n💥 Error crítico: {e}")
         import traceback
         traceback.print_exc()
+        # Intentar guardar historial de error
+        try:
+            guardar_historial('', 'Error crítico', '', f'error_critico: {str(e)}')
+        except:
+            pass
         exit(1)
