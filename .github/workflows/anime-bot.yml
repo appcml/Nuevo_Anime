@@ -2,9 +2,9 @@ name: 🤖 Bot Nuevo Anime
 
 on:
   schedule:
-    # Ejecuta cada 4 horas (puedes cambiarlo)
+    # Ejecuta cada 4 horas
     - cron: '0 */4 * * *'
-  workflow_dispatch:  # Permite ejecutar manualmente
+  workflow_dispatch:
 
 jobs:
   publicar:
@@ -24,12 +24,47 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests pillow
     
+    - name: Verificar variables de entorno (DEBUG)
+      run: |
+        echo "Verificando configuración..."
+        if [ -z "${{ secrets.FB_PAGE_ID }}" ]; then
+          echo "❌ FB_PAGE_ID no está configurado"
+        else
+          echo "✅ FB_PAGE_ID está configurado"
+        fi
+        
+        if [ -z "${{ secrets.FB_ACCESS_TOKEN }}" ]; then
+          echo "❌ FB_ACCESS_TOKEN no está configurado"
+        else
+          echo "✅ FB_ACCESS_TOKEN está configurado (longitud: ${#FB_ACCESS_TOKEN})"
+        fi
+        
+        if [ -z "${{ secrets.OPENROUTER_API_KEY }}" ]; then
+          echo "⚠️ OPENROUTER_API_KEY no está configurado (se usarán plantillas)"
+        else
+          echo "✅ OPENROUTER_API_KEY está configurado"
+        fi
+      env:
+        FB_ACCESS_TOKEN: ${{ secrets.FB_ACCESS_TOKEN }}
+    
     - name: Ejecutar Bot de Anime
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         FB_ACCESS_TOKEN: ${{ secrets.FB_ACCESS_TOKEN }}
         FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-      run: python bot_anime.py
+      run: |
+        echo "Iniciando bot..."
+        python bot_anime.py || echo "El bot falló, revisando errores..."
+    
+    - name: Mostrar historial si existe
+      if: always()
+      run: |
+        if [ -f historial_anime.json ]; then
+          echo "📄 Contenido del historial:"
+          cat historial_anime.json | head -50
+        else
+          echo "⚠️ No se encontró historial_anime.json"
+        fi
     
     - name: Guardar historial
       uses: actions/upload-artifact@v4
