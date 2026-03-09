@@ -93,6 +93,7 @@ def buscar_anime_jikan_random():
         ]
         
         anime_id = random.choice(popular_anime_ids)
+        # CORREGIDO: Eliminado espacio extra en la URL
         url = f"https://api.jikan.moe/v4/anime/{anime_id}/full"
         
         print(f"   🔍 Buscando anime ID: {anime_id}")
@@ -119,6 +120,7 @@ def buscar_personaje_jikan():
         ]
         
         char_id = random.choice(char_ids)
+        # CORREGIDO: Eliminado espacio extra en la URL
         url = f"https://api.jikan.moe/v4/characters/{char_id}/full"
         
         print(f"   🔍 Buscando personaje ID: {char_id}")
@@ -160,6 +162,7 @@ def buscar_anilist_trending():
     
     try:
         print("   🔍 Buscando en AniList...")
+        # CORREGIDO: Eliminado espacio extra en la URL
         resp = requests.post(
             'https://graphql.anilist.co',
             json={'query': query},
@@ -245,6 +248,7 @@ def generar_contenido_retro():
     
     try:
         anime_id = random.choice(retro_ids)
+        # CORREGIDO: Eliminado espacio extra en la URL
         url = f"https://api.jikan.moe/v4/anime/{anime_id}/full"
         resp = requests.get(url, timeout=15)
         anime = resp.json().get('data', {})
@@ -351,6 +355,7 @@ REGLAS:
     for modelo in modelos:
         try:
             print(f"   🤖 Intentando con {modelo}...")
+            # CORREGIDO: Eliminado espacio extra en la URL
             response = requests.post(
                 'https://openrouter.ai/api/v1/chat/completions',
                 headers={
@@ -507,6 +512,7 @@ def publicar_facebook(texto, img_path):
     
     try:
         # MÉTODO CORREGIDO: Usar /photos para publicar con imagen
+        # CORREGIDO: Eliminado espacio extra en la URL
         url = f"https://graph.facebook.com/v18.0/{FB_PAGE_ID}/photos"
         
         with open(img_path, 'rb') as f:
@@ -526,6 +532,7 @@ def publicar_facebook(texto, img_path):
             if resp.status_code == 200 and 'id' in result:
                 post_id = result['id']
                 print(f"   ✅ ¡PUBLICADO! ID: {post_id}")
+                # CORREGIDO: Eliminado espacio extra en la URL
                 print(f"   🔗 https://facebook.com/{post_id}")
                 return True
             else:
@@ -539,6 +546,7 @@ def publicar_facebook(texto, img_path):
                 # Mensajes de ayuda según el error
                 if error_code == 200:
                     print("   💡 Solución: El token necesita permiso 'pages_manage_posts'")
+                    # CORREGIDO: Eliminado espacio extra en la URL
                     print("   💡 Ve a: https://developers.facebook.com/tools/explorer/")
                     print("   💡 Asegúrate de seleccionar 'Página' y no 'Usuario'")
                 elif error_code == 190:
@@ -568,6 +576,7 @@ def main():
     
     # DEBUG: Verificar token con Facebook
     try:
+        # CORREGIDO: Eliminado espacio extra en la URL
         debug_url = f"https://graph.facebook.com/debug_token?input_token={FB_ACCESS_TOKEN}&access_token={FB_ACCESS_TOKEN}"
         debug_resp = requests.get(debug_url)
         debug_data = debug_resp.json()
