@@ -1,14 +1,9 @@
-# ============================================
-# ENVIRONMENT VARIABLES (NEVER COMMIT)
-# ============================================
+# Environment variables
 .env
 .env.local
 .env.*.local
-*.env
 
-# ============================================
-# PYTHON
-# ============================================
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -29,21 +24,13 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# ============================================
-# DATA & LOGS
-# ============================================
+# Data
 data/*.json
 data/*.log
 !data/.gitkeep
-*.log
-*.sqlite
-*.db
 
-# ============================================
-# IDE & OS
-# ============================================
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -52,10 +39,5 @@ data/*.log
 .DS_Store
 Thumbs.db
 
-# ============================================
-# TEMPORARY FILES
-# ============================================
-tmp/
-temp/
-*.tmp
-*.temp
+# Logs
+*.log
