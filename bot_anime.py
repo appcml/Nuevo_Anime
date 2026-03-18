@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bot Anime V2.4 - Español Latino + CTAs + Fix Facebook Limits
-Usa: OpenRouter (gratis) o redacción manual mejorada
+Bot Anime V2.5 - Publicaciones cortas, ordenadas y completas
 """
 
 import requests
@@ -25,7 +24,7 @@ NEWS_API_KEY = os.getenv('NEWS_API_KEY')
 FB_PAGE_ID = os.getenv('FB_PAGE_ID')
 FB_ACCESS_TOKEN = os.getenv('FB_ACCESS_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')  # NUEVO: Alternativa gratuita
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 HISTORIAL_PATH = os.getenv('HISTORIAL_PATH', os.path.join(BASE_DIR, 'data', 'historial_anime.json'))
@@ -34,15 +33,10 @@ ESTADO_PATH = os.getenv('ESTADO_PATH', os.path.join(BASE_DIR, 'data', 'estado_bo
 TIEMPO_ENTRE_PUBLICACIONES = 60
 MAX_PUBLICACIONES_DIA = 24
 UMBRAL_SIMILITUD_TITULO = 0.80
+MAX_CARACTERES_FB = 1500
 
-# LÍMITES FACEBOOK (crítico para evitar errores)
-MAX_CARACTERES_FB = 1500  # Margen seguro bajo el límite de 2000
-MAX_CARACTERES_IA = 400   # Para prompts de IA
-
-# Detectar qué servicio de IA usar (prioridad: OpenRouter > Gemini > Manual)
 AI_SERVICE = None
 
-# 1. Intentar OpenRouter (gratis, no requiere tarjeta)
 if OPENROUTER_API_KEY:
     try:
         test_resp = requests.post(
@@ -53,16 +47,14 @@ if OPENROUTER_API_KEY:
         )
         if test_resp.status_code == 200:
             AI_SERVICE = "openrouter"
-            print("✅ OpenRouter conectado (Gemini Flash Free)")
+            print("✅ OpenRouter conectado")
     except Exception as e:
         print(f"⚠️ OpenRouter no disponible: {e}")
 
-# 2. Intentar Gemini (si no hay cuota agotada)
 if not AI_SERVICE and GEMINI_API_KEY:
     try:
         from google import genai
         client = genai.Client(api_key=GEMINI_API_KEY)
-        # Test simple
         test = client.models.generate_content(model="gemini-2.0-flash", contents="hola")
         AI_SERVICE = "gemini"
         print("✅ Gemini conectado")
@@ -70,7 +62,7 @@ if not AI_SERVICE and GEMINI_API_KEY:
         print(f"⚠️ Gemini no disponible: {e}")
 
 if not AI_SERVICE:
-    print("⚠️ Sin servicio de IA - usando redacción manual mejorada")
+    print("⚠️ Sin servicio de IA - usando redacción manual")
 
 # =============================================================================
 # FUENTES RSS
@@ -95,67 +87,54 @@ PALABRAS_ANIME = {
 }
 
 # =============================================================================
-# REDACCIÓN CON IA (OpenRouter o Gemini) - ESPAÑOL LATINO
+# REDACCIÓN - FORMATO ORDENADO Y COMPLETO
 # =============================================================================
 
 def truncar_texto(texto, max_chars=MAX_CARACTERES_FB):
-    """Trunca texto de forma segura respetando palabras"""
+    """Trunca texto respetando palabras"""
     if len(texto) <= max_chars:
         return texto
     return texto[:max_chars].rsplit(' ', 1)[0] + "..."
 
 def redactar_con_ia(titulo, contenido, tipo="noticia"):
-    """Usa OpenRouter (gratis) o Gemini para redactar en español latino"""
+    """Genera publicación estructurada y completa"""
     
-    emojis = {
-        "personaje": "🎭🎌✨🌟💫🗡️🛡️⚡🔥🎨",
-        "historia": "📖✨🎭🔮🌟⚔️🛡️💫🎪🎬",
-        "estreno": "🚨🎉🎊✨🎌🔥💥⚡🎪",
-        "noticia": "🎌🔥✨📢🚨🎉🌟💥⚡🎭"
+    emojis_tipo = {
+        "personaje": "🎭",
+        "historia": "📖",
+        "estreno": "🚨",
+        "noticia": "📢"
     }
     
-    emoji_set = emojis.get(tipo, emojis["noticia"])
+    emoji_header = emojis_tipo.get(tipo, "📢")
     
-    # CTAs agresivos para engagement
-    ctas_ejemplos = [
-        "🔥 ¿Team Sub o Team Dub? ¡Defiendan su posición!",
-        "💬 ¿Cuál es su anime favorito? ¡Los leo!",
-        "⚔️ ¿Superará a las expectativas? ¡Opinen!",
-        "🎯 ¿A cuántos les emociona? ¡Emojis abajo!",
-        "💥 ¿Qué personaje quieren ver más? ¡Diganme!",
-        "🤔 ¿Buena decisión o error? ¡Debatamos!",
-        "⭐ Del 1 al 10, ¿qué hype tienen? ¡Justifiquen!",
-        "🎭 ¿Su waifu/husbando favorito? ¡Comenten!",
-        "📢 ¿Se lo recomendarían a un amigo? ¡Por qué!",
-        "⚡ ¿Mejor opening o sobrevalorado? ¡Discutan!"
-    ]
-    
-    prompt = f"""Eres un influencer de anime. Crea publicación MUY CORTA en ESPAÑOL LATINO.
+    prompt = f"""Crea una publicación de Facebook sobre anime en ESPAÑOL LATINO.
 
-TÍTULO: {titulo[:80]}
-CONTENIDO: {contenido[:MAX_CARACTERES_IA]}
+TÍTULO ORIGINAL: {titulo}
+CONTENIDO: {contenido[:600]}
 TIPO: {tipo}
 
-REGLAS ESTRICTAS:
-1. MÁXIMO {MAX_CARACTERES_FB - 100} CARACTERES TOTAL (incluyendo emojis y hashtags)
-2. ESPAÑOL LATINO (tú, no usted)
-3. Hook con 🚨 o 🔥 en línea 1
-4. Cuerpo de 2-3 líneas máximo con emojis
-5. CTA corto al final con 👇
-6. 3 hashtags: #Anime #Otaku #[relacionado]
+REGLAS:
+1. ESPAÑOL LATINO (tú, no usted)
+2. Estructura OBLIGATORIA con saltos de línea:
+   - Línea 1: Hook con emoji {emoji_header}
+   - Línea 2: Título traducido/resumido (máx 60 chars)
+   - Línea 3: Resumen de la noticia (2-3 oraciones, máx 150 chars)
+   - Línea 4: CTA para comentar
+   - Línea 5: 3 hashtags
+3. Máximo 1300 caracteres totales
+4. Emojis estratégicos (no excesivos)
+5. Incluir la INFORMACIÓN CLAVE de la noticia
 
-EJEMPLO CTA: {random.choice(ctas_ejemplos)}
+FORMATO EJEMPLO:
+🚨 ¡Nueva temporada confirmada!
 
-FORMATO:
-🚨 [HOOK]
+Jujutsu Kaisen anuncia su temporada final para 2025. El estudio MAPPA confirma que será la conclusión del arco de Shibuya.
 
-[2 líneas con emojis]
+¿Listos para el final? 👇
 
-[CTA] 👇
+#Anime #JujutsuKaisen #NuevoAnime"""
 
-#Anime #Otaku #[extra]"""
-
-    # Intentar OpenRouter (gratis)
     if AI_SERVICE == "openrouter":
         try:
             resp = requests.post(
@@ -169,20 +148,18 @@ FORMATO:
                 json={
                     "model": "google/gemini-2.0-flash-exp:free",
                     "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.8,
-                    "max_tokens": 300  # Reducido para respuestas más cortas
+                    "temperature": 0.7,
+                    "max_tokens": 400
                 },
                 timeout=30
             )
             if resp.status_code == 200:
                 data = resp.json()
                 if 'choices' in data and len(data['choices']) > 0:
-                    texto = data['choices'][0]['message']['content'].strip()
-                    return truncar_texto(texto, MAX_CARACTERES_FB - 50)
+                    return truncar_texto(data['choices'][0]['message']['content'].strip(), 1300)
         except Exception as e:
             print(f"⚠️ Error OpenRouter: {e}")
     
-    # Intentar Gemini
     if AI_SERVICE == "gemini":
         try:
             from google import genai
@@ -192,92 +169,93 @@ FORMATO:
             response = client.models.generate_content(
                 model="gemini-2.0-flash",
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=300)
+                config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=400)
             )
             if response and response.text:
-                return truncar_texto(response.text.strip(), MAX_CARACTERES_FB - 50)
+                return truncar_texto(response.text.strip(), 1300)
         except Exception as e:
             print(f"⚠️ Error Gemini: {e}")
     
     return None
 
 def redactar_manual_mejorado(titulo, contenido, tipo="noticia", fuente=""):
-    """Redacción manual mejorada con templates variados en español latino - VERSIÓN CORTA"""
+    """Redacción manual estructurada y completa"""
     
+    # Hooks por tipo
     hooks = {
-        "personaje": [
-            "🎭 ¡Este personaje rompe el internet!",
-            "✨ ¡Nuevo diseño revelado!",
-            "🚨 ¡Detalles del protagonista!"
-        ],
-        "historia": [
-            "📖 ¡La historia cambia todo!",
-            "🔮 ¡Trama épica confirmada!",
-            "🎪 ¡Nuevo arco anunciado!"
-        ],
-        "estreno": [
-            "🚨 ¡ESTRENO CONFIRMADO!",
-            "🔥 ¡Nuevo anime anunciado!",
-            "🎉 ¡Fecha revelada!"
-        ],
-        "noticia": [
-            "🚨 ¡Última hora anime!",
-            "📢 ¡Noticia bomba!",
-            "🎌 ¡Anuncio importante!"
-        ]
+        "personaje": ["🎭 ¡Nuevo personaje revelado!", "✨ ¡Diseño de personaje filtrado!", "🔥 ¡Sobre el protagonista!"],
+        "historia": ["📖 ¡La historia avanza!", "🔮 ¡Nuevo arco confirmado!", "⚔️ ¡Plot twist anunciado!"],
+        "estreno": ["🚨 ¡Estreno confirmado!", "🎉 ¡Nueva temporada!", "✨ ¡Fecha revelada!"],
+        "noticia": ["📢 ¡Noticia importante!", "🔥 ¡Última hora anime!", "🎌 ¡Anuncio oficial!"]
     }
     
-    # CTAs cortos para máximo engagement
+    # CTAs variados
     ctas = [
-        "\n\n🔥 ¿Sub o Dub? ¡Defiendan! 👇",
-        "\n\n💬 ¿Su anime fav? ¡Los leo! 👇",
-        "\n\n⚔️ ¿Hype sí o no? 👇",
-        "\n\n🎯 ¿Emocionados? ¡Emojis! 👇",
-        "\n\n💥 ¿Qué esperan? ¡Digan! 👇",
-        "\n\n⭐ ¿Del 1 al 10? 👇",
-        "\n\n🎭 ¿Su waifu? ¡Comenten! 👇",
-        "\n\n📢 ¿Lo recomiendan? 👇",
-        "\n\n⚡ ¿Opening top? 👇",
-        "\n\n🎌 ¿Lo verán? ¡Sí/No! 👇"
+        "¿Qué opinan? ¡Los leo! 👇",
+        "¿Emocionados? ¡Comenten! 👇",
+        "¿Lo esperaban? ¡Diganme! 👇",
+        "¿Fav o flop? ¡Debatamos! 👇"
     ]
     
+    # Limpiar y extraer información clave
     hook = random.choice(hooks.get(tipo, hooks["noticia"]))
     cta = random.choice(ctas)
     
-    # Resumen ultra corto
-    resumen = contenido[:120].strip()
-    if len(resumen) > 100:
-        resumen = resumen[:100].rsplit(' ', 1)[0] + "..."
+    # Procesar contenido: extraer oraciones completas
+    oraciones = re.split(r'[.!?]+', contenido)
+    oraciones = [s.strip() for s in oraciones if len(s.strip()) > 20]
     
-    hashtags = {
-        "personaje": "#Anime #Otaku #Personajes",
-        "historia": "#Anime #Otaku #Historia",
-        "estreno": "#Anime #Otaku #Estreno",
-        "noticia": "#Anime #Otaku #Noticias"
+    # Tomar 2 oraciones con información sustancial
+    resumen_parts = []
+    chars_count = 0
+    for oracion in oraciones[:3]:
+        if chars_count + len(oracion) < 180:
+            resumen_parts.append(oracion)
+            chars_count += len(oracion)
+    
+    resumen = ". ".join(resumen_parts)
+    if not resumen:
+        resumen = contenido[:150].rsplit(' ', 1)[0] + "..."
+    
+    # Limpiar título
+    titulo_limpio = re.sub(r'\s+', ' ', titulo).strip()[:70]
+    
+    # Hashtags relevantes
+    hashtags_map = {
+        "personaje": "#Anime #Personajes #Otaku",
+        "historia": "#Anime #Historia #Spoilers",
+        "estreno": "#Anime #Estreno #NuevoAnime",
+        "noticia": "#Anime #Noticias #Otaku"
     }
+    hashtags = hashtags_map.get(tipo, "#Anime #Otaku #Noticias")
     
-    texto = f"""{hook}
-
-🎌 {titulo[:70]}
-
-{resumen}{cta}
-
-{hashtags.get(tipo, hashtags["noticia"])}"""
-
+    # Construir publicación estructurada
+    partes = [
+        hook,
+        "",  # Línea en blanco
+        f"🎌 {titulo_limpio}",
+        "",  # Línea en blanco
+        f"📰 {resumen}.",
+        "",  # Línea en blanco
+        f"💬 {cta}",
+        "",  # Línea en blanco
+        hashtags
+    ]
+    
+    texto = "\n".join(partes)
     return truncar_texto(texto, MAX_CARACTERES_FB)
 
 def verificar_espanol(texto):
-    """Verifica que el texto esté en español básico"""
-    palabras_espanol = ["el", "la", "de", "que", "y", "en", "un", "ser", "se", "no", "lo", "su", "le", "más", "pero", "sus", "del", "al", "con", "por", "para", "es", "son"]
+    """Verifica español básico"""
+    palabras = ["el", "la", "de", "que", "y", "en", "un", "es", "se", "no", "lo", "su", "con", "por", "para"]
     texto_lower = texto.lower()
-    count = sum(1 for palabra in palabras_espanol if f" {palabra} " in f" {texto_lower} ")
-    return count >= 2
+    return sum(1 for p in palabras if f" {p} " in f" {texto_lower} ") >= 3
 
 def detectar_tipo(titulo, desc):
     texto = f"{titulo} {desc}".lower()
-    if any(p in texto for p in ["personaje", "protagonista", "seiyuu", "cast", "diseño"]): return "personaje"
-    if any(p in texto for p in ["historia", "trama", "sinopsis", "arco", "saga"]): return "historia"
-    if any(p in texto for p in ["estreno", "trailer", "nuevo anime", "anunciado", "fecha"]): return "estreno"
+    if any(p in texto for p in ["personaje", "protagonista", "seiyuu", "diseño"]): return "personaje"
+    if any(p in texto for p in ["historia", "trama", "sinopsis", "arco"]): return "historia"
+    if any(p in texto for p in ["estreno", "trailer", "temporada", "fecha"]): return "estreno"
     return "noticia"
 
 # =============================================================================
@@ -366,8 +344,8 @@ def extraer_web(url):
             if elem:
                 paragraphs = elem.find_all('p')
                 text = ' '.join([limpiar_texto(p.get_text()) for p in paragraphs if len(p.get_text()) > 25])
-                if len(text) > 150:
-                    content = text[:800]  # Reducido para ahorrar memoria
+                if len(text) > 100:
+                    content = text[:1000]
                     break
         
         imagen = None
@@ -402,7 +380,7 @@ def descargar_imagen(url):
         img.thumbnail((1200, 1200))
         
         path = f'/tmp/anime_{generar_hash(url)[:8]}.jpg'
-        img.save(path, 'JPEG', quality=85)  # Calidad reducida para menor tamaño
+        img.save(path, 'JPEG', quality=85)
         
         if os.path.getsize(path) < 10000:
             os.remove(path)
@@ -468,7 +446,7 @@ def obtener_noticias():
             feed = feedparser.parse(feed_url, request_headers={'User-Agent': 'Mozilla/5.0'})
             if not feed or not feed.entries: continue
             
-            for entry in feed.entries[:3]:  # Reducido a 3 para menos procesamiento
+            for entry in feed.entries[:3]:
                 titulo = entry.get('title', '').strip()
                 if not titulo or '[Removed]' in titulo: continue
                 
@@ -571,37 +549,27 @@ def verificar_limite():
     return True, estado
 
 # =============================================================================
-# FACEBOOK - SOLUCIÓN CON LÍMITES CORREGIDOS
+# FACEBOOK
 # =============================================================================
 
 def publicar_facebook(mensaje, imagen_path):
-    """
-    Publica en Facebook con manejo de límites de caracteres
-    """
+    """Publica en Facebook con manejo de límites"""
     if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
         log("❌ Faltan credenciales FB", 'error')
         return False
     
-    # Truncar mensaje si es necesario (margen de seguridad)
     mensaje_seguro = truncar_texto(mensaje, MAX_CARACTERES_FB)
-    
     log(f"📝 Caracteres: {len(mensaje_seguro)}/{MAX_CARACTERES_FB}", 'info')
     
-    # Verificar token primero
     try:
         debug_url = "https://graph.facebook.com/v22.0/debug_token"
-        debug_params = {
-            'input_token': FB_ACCESS_TOKEN,
-            'access_token': FB_ACCESS_TOKEN
-        }
+        debug_params = {'input_token': FB_ACCESS_TOKEN, 'access_token': FB_ACCESS_TOKEN}
         
         resp = requests.get(debug_url, params=debug_params, timeout=10)
         debug_info = resp.json()
         
         if 'data' in debug_info:
             data = debug_info['data']
-            log(f"🔐 Token válido: {data.get('is_valid', False)}", 'info')
-            
             scopes = data.get('scopes', [])
             if 'pages_manage_posts' not in scopes:
                 log("❌ FALTA PERMISO: pages_manage_posts", 'error')
@@ -609,49 +577,31 @@ def publicar_facebook(mensaje, imagen_path):
             
             profile_id = data.get('profile_id')
             if profile_id and profile_id != FB_PAGE_ID:
-                log(f"⚠️ Token de perfil {profile_id}, no página {FB_PAGE_ID}", 'advertencia')
                 page_token = obtener_page_token(FB_ACCESS_TOKEN, FB_PAGE_ID)
                 if page_token:
                     return publicar_con_token(mensaje_seguro, imagen_path, page_token)
                 return False
-        else:
-            log(f"⚠️ No se pudo verificar token", 'advertencia')
-            
     except Exception as e:
         log(f"⚠️ Error verificando token: {e}", 'advertencia')
     
     return publicar_con_token(mensaje_seguro, imagen_path, FB_ACCESS_TOKEN)
 
 def obtener_page_token(user_token, page_id):
-    """Intenta obtener el Page Access Token desde el User Token"""
     try:
         url = f"https://graph.facebook.com/v22.0/{page_id}"
-        params = {
-            'fields': 'access_token',
-            'access_token': user_token
-        }
+        params = {'fields': 'access_token', 'access_token': user_token}
         resp = requests.get(url, params=params, timeout=10)
         data = resp.json()
-        
-        if 'access_token' in data:
-            return data['access_token']
-        
-        error = data.get('error', {})
-        log(f"❌ No se pudo obtener Page Token: {error.get('message', 'Unknown')}", 'error')
-        return None
-        
+        return data.get('access_token')
     except Exception as e:
         log(f"❌ Error obteniendo Page Token: {e}", 'error')
         return None
 
 def publicar_con_token(mensaje, imagen_path, token):
-    """Publicar con un token específico - versión optimizada"""
     try:
         url = f"https://graph.facebook.com/v22.0/{FB_PAGE_ID}/photos"
         
-        # Verificar tamaño de imagen
-        if os.path.getsize(imagen_path) > 10 * 1024 * 1024:  # 10MB límite FB
-            log("⚠️ Imagen muy grande, comprimiendo...", 'advertencia')
+        if os.path.getsize(imagen_path) > 10 * 1024 * 1024:
             from PIL import Image
             img = Image.open(imagen_path)
             img.thumbnail((800, 800))
@@ -660,7 +610,7 @@ def publicar_con_token(mensaje, imagen_path, token):
         with open(imagen_path, 'rb') as img:
             files = {'file': ('anime.jpg', img, 'image/jpeg')}
             data = {
-                'message': mensaje[:MAX_CARACTERES_FB],  # Doble seguridad
+                'message': mensaje[:MAX_CARACTERES_FB],
                 'access_token': token,
                 'published': 'true'
             }
@@ -676,14 +626,10 @@ def publicar_con_token(mensaje, imagen_path, token):
         error = result.get('error', {})
         code = error.get('code')
         msg = error.get('message', 'Unknown')
-        
         log(f"❌ Error FB ({code}): {msg}", 'error')
         
-        # Si es error de tamaño, intentar solo texto
         if code in [1, 200]:
-            log("🔄 Intentando solo texto...", 'info')
             return publicar_solo_texto(mensaje, token)
-        
         return False
         
     except Exception as e:
@@ -691,7 +637,6 @@ def publicar_con_token(mensaje, imagen_path, token):
         return False
 
 def publicar_solo_texto(mensaje, token):
-    """Fallback: publicar solo texto"""
     try:
         url = f"https://graph.facebook.com/v22.0/{FB_PAGE_ID}/feed"
         data = {
@@ -720,7 +665,7 @@ def publicar_solo_texto(mensaje, token):
 
 def main():
     print("\n" + "="*70)
-    print("🇯🇵 BOT ANIME V2.4 - Español + CTAs + Límites FB")
+    print("🇯🇵 BOT ANIME V2.5 - Publicaciones ordenadas y completas")
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"🤖 IA: {AI_SERVICE or 'Manual'} | FB: {'✅' if FB_ACCESS_TOKEN else '❌'}")
     print("="*70)
@@ -750,7 +695,7 @@ def main():
     mensaje_final = None
     imagen_url = None
     
-    for noticia in unicas[:5]:  # Reducido a 5 intentos
+    for noticia in unicas[:5]:
         contenido, img_web = extraer_web(noticia['url'])
         texto = contenido if (contenido and len(contenido) >= 50) else noticia['descripcion']
         
@@ -777,19 +722,19 @@ def main():
         log("❌ No procesable", 'error')
         return False
     
-    # Verificación final
     if not verificar_espanol(mensaje_final):
-        log("⚠️ Regenerando en español...", 'advertencia')
         mensaje_final = redactar_manual_mejorado(seleccionada['titulo'], "noticia anime", seleccionada['tipo'], seleccionada['fuente'])
     
-    # Asegurar límite de caracteres
     mensaje_final = truncar_texto(mensaje_final, MAX_CARACTERES_FB)
     
-    print(f"\n📝 {seleccionada['titulo'][:55]}... | {seleccionada['tipo']} | {seleccionada['puntaje']}pts")
-    print(f"📏 Caracteres: {len(mensaje_final)}/{MAX_CARACTERES_FB}")
-    print(f"🎯 CTA: {'👇' in mensaje_final}")
+    # Mostrar preview formateada
+    print(f"\n{'='*50}")
+    print(f"📝 PREVIEW:")
+    print(f"{'='*50}")
+    print(mensaje_final)
+    print(f"{'='*50}")
+    print(f"📊 Stats: {len(mensaje_final)} chars | Tipo: {seleccionada['tipo']} | Score: {seleccionada['puntaje']}")
     
-    # Imagen
     log("🖼️ Procesando imagen...", 'info')
     img_path = descargar_imagen(imagen_url) if imagen_url else None
     if not img_path:
@@ -797,7 +742,6 @@ def main():
     
     if not img_path:
         log("❌ Sin imagen, intentando texto solo...", 'error')
-        # Intentar publicar solo texto si no hay imagen
         exito = publicar_solo_texto(mensaje_final, FB_ACCESS_TOKEN)
     else:
         exito = publicar_facebook(mensaje_final, img_path)
