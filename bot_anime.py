@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bot Anime V2.3 - Español Latino + CTAs para Engagement
+Bot Anime V2.4 - Español Latino + CTAs + Fix Facebook Limits
 Usa: OpenRouter (gratis) o redacción manual mejorada
 """
 
@@ -34,6 +34,10 @@ ESTADO_PATH = os.getenv('ESTADO_PATH', os.path.join(BASE_DIR, 'data', 'estado_bo
 TIEMPO_ENTRE_PUBLICACIONES = 60
 MAX_PUBLICACIONES_DIA = 24
 UMBRAL_SIMILITUD_TITULO = 0.80
+
+# LÍMITES FACEBOOK (crítico para evitar errores)
+MAX_CARACTERES_FB = 1500  # Margen seguro bajo el límite de 2000
+MAX_CARACTERES_IA = 400   # Para prompts de IA
 
 # Detectar qué servicio de IA usar (prioridad: OpenRouter > Gemini > Manual)
 AI_SERVICE = None
@@ -94,6 +98,12 @@ PALABRAS_ANIME = {
 # REDACCIÓN CON IA (OpenRouter o Gemini) - ESPAÑOL LATINO
 # =============================================================================
 
+def truncar_texto(texto, max_chars=MAX_CARACTERES_FB):
+    """Trunca texto de forma segura respetando palabras"""
+    if len(texto) <= max_chars:
+        return texto
+    return texto[:max_chars].rsplit(' ', 1)[0] + "..."
+
 def redactar_con_ia(titulo, contenido, tipo="noticia"):
     """Usa OpenRouter (gratis) o Gemini para redactar en español latino"""
     
@@ -108,46 +118,42 @@ def redactar_con_ia(titulo, contenido, tipo="noticia"):
     
     # CTAs agresivos para engagement
     ctas_ejemplos = [
-        "🔥 ¿Team Sub o Team Dub? ¡Defiendan su posición en los comentarios!",
-        "💬 ¿Cuál es su anime favorito de esta temporada? ¡Los leo a todos!",
-        "⚔️ ¿Creen que superará a la temporada anterior? ¡Dejen su opinión!",
-        "🎯 ¿A cuántos les emociona esto? ¡Comenten con un emoji!",
-        "💥 ¿Qué personaje quieren ver más? ¡Diganme en los comentarios!",
-        "🤔 ¿Buena decisión o terrible error? ¡Debatamos abajo!",
-        "⭐ Del 1 al 10, ¿qué hype tienen? ¡Justifiquen su respuesta!",
-        "🎭 ¿Quién es su waifu/husbando favorito? ¡Los quiero ver comentando!",
-        "📢 ¿Se lo recomendarían a un amigo nuevo en el anime? ¡Digan por qué!",
-        "⚡ ¿Mejor opening de la historia o sobrevalorado? ¡Discutamos!"
+        "🔥 ¿Team Sub o Team Dub? ¡Defiendan su posición!",
+        "💬 ¿Cuál es su anime favorito? ¡Los leo!",
+        "⚔️ ¿Superará a las expectativas? ¡Opinen!",
+        "🎯 ¿A cuántos les emociona? ¡Emojis abajo!",
+        "💥 ¿Qué personaje quieren ver más? ¡Diganme!",
+        "🤔 ¿Buena decisión o error? ¡Debatamos!",
+        "⭐ Del 1 al 10, ¿qué hype tienen? ¡Justifiquen!",
+        "🎭 ¿Su waifu/husbando favorito? ¡Comenten!",
+        "📢 ¿Se lo recomendarían a un amigo? ¡Por qué!",
+        "⚡ ¿Mejor opening o sobrevalorado? ¡Discutan!"
     ]
     
-    prompt = f"""Eres un influencer de anime en Instagram/Facebook. Crea una publicación viral y emocionante EN ESPAÑOL LATINO.
+    prompt = f"""Eres un influencer de anime. Crea publicación MUY CORTA en ESPAÑOL LATINO.
 
-TÍTULO: {titulo}
-CONTENIDO: {contenido[:500]}
+TÍTULO: {titulo[:80]}
+CONTENIDO: {contenido[:MAX_CARACTERES_IA]}
 TIPO: {tipo}
 
-REGLAS OBLIGATORIAS:
-1. ESPAÑOL LATINO exclusivamente - joven, entusiasta y natural (no uses "usted", usa "tú")
-2. USA MUCHOS EMOJIS: {emoji_set}
-3. Primera línea HOOK llamativo con 🚨 o 🔥
-4. Máximo 1400 caracteres
-5. 3-4 hashtags al final: #Anime #Otaku #NuevoAnime
-6. CTA final AGRESIVO para comentarios (pregunta controversial o que invite opinión fuerte)
+REGLAS ESTRICTAS:
+1. MÁXIMO {MAX_CARACTERES_FB - 100} CARACTERES TOTAL (incluyendo emojis y hashtags)
+2. ESPAÑOL LATINO (tú, no usted)
+3. Hook con 🚨 o 🔥 en línea 1
+4. Cuerpo de 2-3 líneas máximo con emojis
+5. CTA corto al final con 👇
+6. 3 hashtags: #Anime #Otaku #[relacionado]
 
-EJEMPLOS DE CTAS (usa uno similar o adaptado):
-{random.choice(ctas_ejemplos)}
-{random.choice(ctas_ejemplos)}
+EJEMPLO CTA: {random.choice(ctas_ejemplos)}
 
 FORMATO:
-🚨 [HOOK impactante en español]
+🚨 [HOOK]
 
-[Cuerpo con emojis y emoción en español]
+[2 líneas con emojis]
 
-📎 Fuente: [breve]
+[CTA] 👇
 
-[Hashtags]
-
-[CTA fuerte para comentarios] 👇"""
+#Anime #Otaku #[extra]"""
 
     # Intentar OpenRouter (gratis)
     if AI_SERVICE == "openrouter":
@@ -157,21 +163,22 @@ FORMATO:
                 headers={
                     "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://github.com",  # Requerido por OpenRouter
+                    "HTTP-Referer": "https://github.com",
                     "X-Title": "Anime Bot"
                 },
                 json={
-                    "model": "google/gemini-2.0-flash-exp:free",  # Modelo gratuito
+                    "model": "google/gemini-2.0-flash-exp:free",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.8,
-                    "max_tokens": 600
+                    "max_tokens": 300  # Reducido para respuestas más cortas
                 },
                 timeout=30
             )
             if resp.status_code == 200:
                 data = resp.json()
                 if 'choices' in data and len(data['choices']) > 0:
-                    return data['choices'][0]['message']['content'].strip()
+                    texto = data['choices'][0]['message']['content'].strip()
+                    return truncar_texto(texto, MAX_CARACTERES_FB - 50)
         except Exception as e:
             print(f"⚠️ Error OpenRouter: {e}")
     
@@ -185,101 +192,92 @@ FORMATO:
             response = client.models.generate_content(
                 model="gemini-2.0-flash",
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=600)
+                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=300)
             )
             if response and response.text:
-                return response.text.strip()
+                return truncar_texto(response.text.strip(), MAX_CARACTERES_FB - 50)
         except Exception as e:
             print(f"⚠️ Error Gemini: {e}")
     
     return None
 
 def redactar_manual_mejorado(titulo, contenido, tipo="noticia", fuente=""):
-    """Redacción manual mejorada con templates variados en español latino"""
+    """Redacción manual mejorada con templates variados en español latino - VERSIÓN CORTA"""
     
     hooks = {
         "personaje": [
-            "🎭 ¡Este personaje está rompiendo el internet! 🔥",
-            "✨ El personaje que tiene a todos hablando... 🗣️",
-            "🚨 ¡Revelan detalles exclusivos de nuestro protagonista! 💫",
-            "🔥 ¡Nuevo diseño de personaje filtrado! ¿Opiniones? 🎭"
+            "🎭 ¡Este personaje rompe el internet!",
+            "✨ ¡Nuevo diseño revelado!",
+            "🚨 ¡Detalles del protagonista!"
         ],
         "historia": [
-            "📖 ¡La historia que cambiará TODO! 🚨",
-            "🔮 ¿Listos para esta trama épica? ✨",
-            "🎪 ¡Nuevo arco argumental confirmado! 🚨",
-            "⚔️ ¡Plot twist inesperado! ¿Lo venían venir? 📖"
+            "📖 ¡La historia cambia todo!",
+            "🔮 ¡Trama épica confirmada!",
+            "🎪 ¡Nuevo arco anunciado!"
         ],
         "estreno": [
-            "🚨 ¡ESTRENO CONFIRMADO! Marquen sus calendarios 🗓️",
-            "🔥 ¡Nuevo anime anunciado! La hype es REAL ✨",
-            "🎉 ¡Fecha de estreno revelada! ¿Emocionados? 🚨",
-            "✨ ¡Se acerca la nueva temporada! ¿Preparados? 🎌"
+            "🚨 ¡ESTRENO CONFIRMADO!",
+            "🔥 ¡Nuevo anime anunciado!",
+            "🎉 ¡Fecha revelada!"
         ],
         "noticia": [
-            "🚨 ¡Última hora del mundo anime! 🔥",
-            "📢 Noticia que acaba de caer... ✨",
-            "🎌 ¡Anuncio importante para todos los otakus! 🚨",
-            "🔥 ¡Bomba informativa! Esto cambia todo... 💥"
+            "🚨 ¡Última hora anime!",
+            "📢 ¡Noticia bomba!",
+            "🎌 ¡Anuncio importante!"
         ]
     }
     
-    # CTAs agresivos para engagement máximo
+    # CTAs cortos para máximo engagement
     ctas = [
-        "\n\n🔥 ¿Team Sub o Team Dub? ¡Defiendan su posición en los comentarios! 👇",
-        "\n\n💬 ¿Cuál es su anime favorito del momento? ¡Los leo a todos! 👇",
-        "\n\n⚔️ ¿Creen que superará a las expectativas? ¡Dejen su opinión! 👇",
-        "\n\n🎯 ¿A cuántos les emociona esto? ¡Comenten con emojis! 👇",
-        "\n\n💥 ¿Qué esperan de esto? ¡Diganme abajo! 👇",
-        "\n\n🤔 ¿Buena decisión o terrible error? ¡Debatamos! 👇",
-        "\n\n⭐ Del 1 al 10, ¿qué hype tienen? ¡Justifiquen! 👇",
-        "\n\n🎭 ¿Quién es su waifu/husbando favorito? ¡Los quiero ver comentando! 👇",
-        "\n\n📢 ¿Se lo recomendarían a un amigo nuevo? ¡Digan por qué! 👇",
-        "\n\n⚡ ¿Mejor opening de la historia o sobrevalorado? ¡Discutamos! 👇",
-        "\n\n🎌 ¿Ustedes lo van a ver? ¡Diganme sí o no! 👇",
-        "\n\n💫 ¿Qué les gustaría ver en esta nueva temporada? ¡Ideas abajo! 👇"
+        "\n\n🔥 ¿Sub o Dub? ¡Defiendan! 👇",
+        "\n\n💬 ¿Su anime fav? ¡Los leo! 👇",
+        "\n\n⚔️ ¿Hype sí o no? 👇",
+        "\n\n🎯 ¿Emocionados? ¡Emojis! 👇",
+        "\n\n💥 ¿Qué esperan? ¡Digan! 👇",
+        "\n\n⭐ ¿Del 1 al 10? 👇",
+        "\n\n🎭 ¿Su waifu? ¡Comenten! 👇",
+        "\n\n📢 ¿Lo recomiendan? 👇",
+        "\n\n⚡ ¿Opening top? 👇",
+        "\n\n🎌 ¿Lo verán? ¡Sí/No! 👇"
     ]
     
     hook = random.choice(hooks.get(tipo, hooks["noticia"]))
-    cta = random.choice(ctas)  # CTA aleatorio para variar
+    cta = random.choice(ctas)
     
-    # Resumir contenido
-    resumen = contenido[:280].strip()
-    if len(resumen) > 250:
-        resumen = resumen[:250].rsplit(' ', 1)[0] + "..."
+    # Resumen ultra corto
+    resumen = contenido[:120].strip()
+    if len(resumen) > 100:
+        resumen = resumen[:100].rsplit(' ', 1)[0] + "..."
     
     hashtags = {
-        "personaje": "#Anime #Personajes #Otaku #Manga #Waifu",
-        "historia": "#Anime #Historia #Otaku #Spoilers #Manga",
-        "estreno": "#Anime #Estreno #NuevoAnime #Otaku #Hype",
-        "noticia": "#Anime #NoticiasAnime #Otaku #NuevoAnime #Manga"
+        "personaje": "#Anime #Otaku #Personajes",
+        "historia": "#Anime #Otaku #Historia",
+        "estreno": "#Anime #Otaku #Estreno",
+        "noticia": "#Anime #Otaku #Noticias"
     }
     
     texto = f"""{hook}
 
-🎌 {titulo}
+🎌 {titulo[:70]}
 
-{resumen}
+{resumen}{cta}
 
-📎 Fuente: {fuente}{cta}
+{hashtags.get(tipo, hashtags["noticia"])}"""
 
-{hashtags.get(tipo, hashtags["noticia"])}
-— Nuevo Anime 🎌"""
-
-    return texto
+    return truncar_texto(texto, MAX_CARACTERES_FB)
 
 def verificar_espanol(texto):
     """Verifica que el texto esté en español básico"""
-    palabras_espanol = ["el", "la", "de", "que", "y", "en", "un", "ser", "se", "no", "lo", "su", "le", "más", "pero", "sus", "del", "al", "con", "por", "para", "es", "son", "fue", "han", "hay", "su", "mi", "tu"]
+    palabras_espanol = ["el", "la", "de", "que", "y", "en", "un", "ser", "se", "no", "lo", "su", "le", "más", "pero", "sus", "del", "al", "con", "por", "para", "es", "son"]
     texto_lower = texto.lower()
     count = sum(1 for palabra in palabras_espanol if f" {palabra} " in f" {texto_lower} ")
-    return count >= 3  # Al menos 3 palabras comunes en español
+    return count >= 2
 
 def detectar_tipo(titulo, desc):
     texto = f"{titulo} {desc}".lower()
-    if any(p in texto for p in ["personaje", "protagonista", "seiyuu", "cast", "diseño", "apariencia"]): return "personaje"
-    if any(p in texto for p in ["historia", "trama", "sinopsis", "arco", "saga", "plot", "twist"]): return "historia"
-    if any(p in texto for p in ["estreno", "trailer", "nuevo anime", "anunciado", "fecha", "temporada", "próximo"]): return "estreno"
+    if any(p in texto for p in ["personaje", "protagonista", "seiyuu", "cast", "diseño"]): return "personaje"
+    if any(p in texto for p in ["historia", "trama", "sinopsis", "arco", "saga"]): return "historia"
+    if any(p in texto for p in ["estreno", "trailer", "nuevo anime", "anunciado", "fecha"]): return "estreno"
     return "noticia"
 
 # =============================================================================
@@ -369,7 +367,7 @@ def extraer_web(url):
                 paragraphs = elem.find_all('p')
                 text = ' '.join([limpiar_texto(p.get_text()) for p in paragraphs if len(p.get_text()) > 25])
                 if len(text) > 150:
-                    content = text[:1200]
+                    content = text[:800]  # Reducido para ahorrar memoria
                     break
         
         imagen = None
@@ -404,7 +402,7 @@ def descargar_imagen(url):
         img.thumbnail((1200, 1200))
         
         path = f'/tmp/anime_{generar_hash(url)[:8]}.jpg'
-        img.save(path, 'JPEG', quality=90)
+        img.save(path, 'JPEG', quality=85)  # Calidad reducida para menor tamaño
         
         if os.path.getsize(path) < 10000:
             os.remove(path)
@@ -419,21 +417,18 @@ def crear_imagen_default(titulo):
         from PIL import Image, ImageDraw, ImageFont
         import textwrap
         
-        # Crear gradiente simple
         img = Image.new('RGB', (1200, 630), color='#0f0f23')
         draw = ImageDraw.Draw(img)
         
-        # Decoraciones
         draw.rectangle([(0, 0), (1200, 8)], fill='#ff006e')
         draw.rectangle([(0, 622), (1200, 630)], fill='#3a0ca3')
         
-        # Intentar cargar fuentes del sistema
         fonts_to_try = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
             "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-            "/System/Library/Fonts/Helvetica.ttc",  # macOS
-            "C:/Windows/Fonts/arial.ttf"  # Windows
+            "/System/Library/Fonts/Helvetica.ttc",
+            "C:/Windows/Fonts/arial.ttf"
         ]
         
         font_title = font_sub = None
@@ -448,7 +443,7 @@ def crear_imagen_default(titulo):
         if not font_title:
             font_title = font_sub = ImageFont.load_default()
         
-        wrapped = textwrap.fill(titulo[:90], width=32)
+        wrapped = textwrap.fill(titulo[:70], width=30)
         lines = wrapped.split('\n')
         y_start = (630 - len(lines) * 55) // 2 - 10
         
@@ -459,7 +454,7 @@ def crear_imagen_default(titulo):
         draw.text((60, 590), "🎌 Tu fuente otaku de confianza", font=font_sub, fill='#a0a0a0')
         
         path = f'/tmp/anime_def_{generar_hash(titulo)[:8]}.jpg'
-        img.save(path, 'JPEG', quality=95)
+        img.save(path, 'JPEG', quality=90)
         return path
     except Exception as e:
         log(f"Error imagen default: {e}", 'error')
@@ -473,7 +468,7 @@ def obtener_noticias():
             feed = feedparser.parse(feed_url, request_headers={'User-Agent': 'Mozilla/5.0'})
             if not feed or not feed.entries: continue
             
-            for entry in feed.entries[:5]:
+            for entry in feed.entries[:3]:  # Reducido a 3 para menos procesamiento
                 titulo = entry.get('title', '').strip()
                 if not titulo or '[Removed]' in titulo: continue
                 
@@ -576,24 +571,28 @@ def verificar_limite():
     return True, estado
 
 # =============================================================================
-# FACEBOOK - SOLUCIÓN DEFINITIVA
+# FACEBOOK - SOLUCIÓN CON LÍMITES CORREGIDOS
 # =============================================================================
 
 def publicar_facebook(mensaje, imagen_path):
     """
-    SOLUCIÓN: Usar Page Access Token con permisos correctos
+    Publica en Facebook con manejo de límites de caracteres
     """
     if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
         log("❌ Faltan credenciales FB", 'error')
         return False
     
-    # Primero: verificar qué tipo de token tenemos y sus permisos
+    # Truncar mensaje si es necesario (margen de seguridad)
+    mensaje_seguro = truncar_texto(mensaje, MAX_CARACTERES_FB)
+    
+    log(f"📝 Caracteres: {len(mensaje_seguro)}/{MAX_CARACTERES_FB}", 'info')
+    
+    # Verificar token primero
     try:
-        # Debug token
         debug_url = "https://graph.facebook.com/v22.0/debug_token"
         debug_params = {
             'input_token': FB_ACCESS_TOKEN,
-            'access_token': FB_ACCESS_TOKEN  # Usar el mismo token para debug
+            'access_token': FB_ACCESS_TOKEN
         }
         
         resp = requests.get(debug_url, params=debug_params, timeout=10)
@@ -602,42 +601,26 @@ def publicar_facebook(mensaje, imagen_path):
         if 'data' in debug_info:
             data = debug_info['data']
             log(f"🔐 Token válido: {data.get('is_valid', False)}", 'info')
-            log(f"🔐 Tipo: {data.get('type', 'unknown')}", 'info')
-            log(f"🔐 App: {data.get('app_name', 'unknown')}", 'info')
             
             scopes = data.get('scopes', [])
-            log(f"🔐 Permisos: {scopes}", 'info')
-            
-            # Verificar si tenemos pages_manage_posts
             if 'pages_manage_posts' not in scopes:
                 log("❌ FALTA PERMISO: pages_manage_posts", 'error')
-                log("👉 Ve a: https://developers.facebook.com/tools/explorer/", 'advertencia')
-                log("👉 Selecciona tu app y genera token con 'pages_manage_posts'", 'advertencia')
                 return False
             
-            # Verificar que es un Page Token, no User Token
             profile_id = data.get('profile_id')
             if profile_id and profile_id != FB_PAGE_ID:
-                log(f"⚠️ Token es de perfil {profile_id}, no de página {FB_PAGE_ID}", 'advertencia')
-                log("👉 Necesitas un Page Access Token, no User Access Token", 'advertencia')
-                
-                # Intentar obtener Page Token automáticamente
-                log("🔄 Intentando obtener Page Token automáticamente...", 'info')
+                log(f"⚠️ Token de perfil {profile_id}, no página {FB_PAGE_ID}", 'advertencia')
                 page_token = obtener_page_token(FB_ACCESS_TOKEN, FB_PAGE_ID)
                 if page_token:
-                    log("✅ Page Token obtenido automáticamente", 'exito')
-                    # Reintentar con el nuevo token
-                    return publicar_con_token(mensaje, imagen_path, page_token)
-                else:
-                    return False
+                    return publicar_con_token(mensaje_seguro, imagen_path, page_token)
+                return False
         else:
-            log(f"⚠️ No se pudo verificar token: {debug_info}", 'advertencia')
+            log(f"⚠️ No se pudo verificar token", 'advertencia')
             
     except Exception as e:
         log(f"⚠️ Error verificando token: {e}", 'advertencia')
     
-    # Si llegamos aquí, usar el token actual
-    return publicar_con_token(mensaje, imagen_path, FB_ACCESS_TOKEN)
+    return publicar_con_token(mensaje_seguro, imagen_path, FB_ACCESS_TOKEN)
 
 def obtener_page_token(user_token, page_id):
     """Intenta obtener el Page Access Token desde el User Token"""
@@ -662,14 +645,22 @@ def obtener_page_token(user_token, page_id):
         return None
 
 def publicar_con_token(mensaje, imagen_path, token):
-    """Publicar con un token específico"""
+    """Publicar con un token específico - versión optimizada"""
     try:
         url = f"https://graph.facebook.com/v22.0/{FB_PAGE_ID}/photos"
+        
+        # Verificar tamaño de imagen
+        if os.path.getsize(imagen_path) > 10 * 1024 * 1024:  # 10MB límite FB
+            log("⚠️ Imagen muy grande, comprimiendo...", 'advertencia')
+            from PIL import Image
+            img = Image.open(imagen_path)
+            img.thumbnail((800, 800))
+            img.save(imagen_path, 'JPEG', quality=70, optimize=True)
         
         with open(imagen_path, 'rb') as img:
             files = {'file': ('anime.jpg', img, 'image/jpeg')}
             data = {
-                'message': mensaje[:2000],
+                'message': mensaje[:MAX_CARACTERES_FB],  # Doble seguridad
                 'access_token': token,
                 'published': 'true'
             }
@@ -688,8 +679,9 @@ def publicar_con_token(mensaje, imagen_path, token):
         
         log(f"❌ Error FB ({code}): {msg}", 'error')
         
-        # Si es error 200, intentar solo texto
-        if code == 200:
+        # Si es error de tamaño, intentar solo texto
+        if code in [1, 200]:
+            log("🔄 Intentando solo texto...", 'info')
             return publicar_solo_texto(mensaje, token)
         
         return False
@@ -703,7 +695,7 @@ def publicar_solo_texto(mensaje, token):
     try:
         url = f"https://graph.facebook.com/v22.0/{FB_PAGE_ID}/feed"
         data = {
-            'message': mensaje[:2000],
+            'message': mensaje[:MAX_CARACTERES_FB],
             'access_token': token,
             'link': 'https://anime.news'
         }
@@ -728,7 +720,7 @@ def publicar_solo_texto(mensaje, token):
 
 def main():
     print("\n" + "="*70)
-    print("🇯🇵 BOT ANIME V2.3 - Español Latino + CTAs Engagement")
+    print("🇯🇵 BOT ANIME V2.4 - Español + CTAs + Límites FB")
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"🤖 IA: {AI_SERVICE or 'Manual'} | FB: {'✅' if FB_ACCESS_TOKEN else '❌'}")
     print("="*70)
@@ -758,42 +750,44 @@ def main():
     mensaje_final = None
     imagen_url = None
     
-    for noticia in unicas[:8]:
+    for noticia in unicas[:5]:  # Reducido a 5 intentos
         contenido, img_web = extraer_web(noticia['url'])
-        texto = contenido if (contenido and len(contenido) >= 80) else noticia['descripcion']
+        texto = contenido if (contenido and len(contenido) >= 50) else noticia['descripcion']
         
-        if len(texto) >= 60:
+        if len(texto) >= 40:
             seleccionada = noticia
             imagen_url = noticia.get('imagen') or img_web
             
-            # Generar texto
             log(f"✍️ Generando ({AI_SERVICE or 'manual'})...", 'info')
             
             texto_ia = redactar_con_ia(noticia['titulo'], texto, noticia['tipo'])
             if texto_ia:
                 mensaje_final = texto_ia
-                # Verificar que esté en español
                 if not verificar_espanol(mensaje_final):
                     log("⚠️ IA no generó español, usando manual...", 'advertencia')
                     mensaje_final = redactar_manual_mejorado(noticia['titulo'], texto, noticia['tipo'], noticia['fuente'])
                 else:
-                    log("✅ Texto generado por IA en español", 'exito')
+                    log("✅ Texto IA en español", 'exito')
             else:
                 mensaje_final = redactar_manual_mejorado(noticia['titulo'], texto, noticia['tipo'], noticia['fuente'])
-                log("✅ Texto manual en español", 'info')
+                log("✅ Texto manual", 'info')
             break
     
     if not seleccionada or not mensaje_final:
         log("❌ No procesable", 'error')
         return False
     
-    # Verificación final de español
+    # Verificación final
     if not verificar_espanol(mensaje_final):
-        log("⚠️ Texto no parece estar en español, regenerando...", 'advertencia')
-        mensaje_final = redactar_manual_mejorado(seleccionada['titulo'], texto, seleccionada['tipo'], seleccionada['fuente'])
+        log("⚠️ Regenerando en español...", 'advertencia')
+        mensaje_final = redactar_manual_mejorado(seleccionada['titulo'], "noticia anime", seleccionada['tipo'], seleccionada['fuente'])
+    
+    # Asegurar límite de caracteres
+    mensaje_final = truncar_texto(mensaje_final, MAX_CARACTERES_FB)
     
     print(f"\n📝 {seleccionada['titulo'][:55]}... | {seleccionada['tipo']} | {seleccionada['puntaje']}pts")
-    print(f"🎯 CTA incluido: {'👇' in mensaje_final}")
+    print(f"📏 Caracteres: {len(mensaje_final)}/{MAX_CARACTERES_FB}")
+    print(f"🎯 CTA: {'👇' in mensaje_final}")
     
     # Imagen
     log("🖼️ Procesando imagen...", 'info')
@@ -802,16 +796,14 @@ def main():
         img_path = crear_imagen_default(seleccionada['titulo'])
     
     if not img_path:
-        log("❌ Sin imagen", 'error')
-        return False
-    
-    # Publicar
-    log("📘 Publicando en FB...", 'info')
-    exito = publicar_facebook(mensaje_final, img_path)
-    
-    try:
-        if os.path.exists(img_path): os.remove(img_path)
-    except: pass
+        log("❌ Sin imagen, intentando texto solo...", 'error')
+        # Intentar publicar solo texto si no hay imagen
+        exito = publicar_solo_texto(mensaje_final, FB_ACCESS_TOKEN)
+    else:
+        exito = publicar_facebook(mensaje_final, img_path)
+        try:
+            if os.path.exists(img_path): os.remove(img_path)
+        except: pass
     
     if exito:
         historial = guardar_historial(historial, seleccionada['url'], seleccionada['titulo'])
