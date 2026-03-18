@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bot Anime V2.5 - Publicaciones cortas, ordenadas y completas
+Bot Anime V2.6 - Más información, formato ordenado
 """
 
 import requests
@@ -33,7 +33,7 @@ ESTADO_PATH = os.getenv('ESTADO_PATH', os.path.join(BASE_DIR, 'data', 'estado_bo
 TIEMPO_ENTRE_PUBLICACIONES = 60
 MAX_PUBLICACIONES_DIA = 24
 UMBRAL_SIMILITUD_TITULO = 0.80
-MAX_CARACTERES_FB = 1500
+MAX_CARACTERES_FB = 1800  # Aumentado para más contenido
 
 AI_SERVICE = None
 
@@ -87,17 +87,17 @@ PALABRAS_ANIME = {
 }
 
 # =============================================================================
-# REDACCIÓN - FORMATO ORDENADO Y COMPLETO
+# REDACCIÓN - MÁS INFORMACIÓN, FORMATO ORDENADO
 # =============================================================================
 
 def truncar_texto(texto, max_chars=MAX_CARACTERES_FB):
-    """Trunca texto respetando palabras"""
+    """Trunca texto respetando palabras y estructura"""
     if len(texto) <= max_chars:
         return texto
     return texto[:max_chars].rsplit(' ', 1)[0] + "..."
 
 def redactar_con_ia(titulo, contenido, tipo="noticia"):
-    """Genera publicación estructurada y completa"""
+    """Genera publicación con más información pero ordenada"""
     
     emojis_tipo = {
         "personaje": "🎭",
@@ -111,29 +111,37 @@ def redactar_con_ia(titulo, contenido, tipo="noticia"):
     prompt = f"""Crea una publicación de Facebook sobre anime en ESPAÑOL LATINO.
 
 TÍTULO ORIGINAL: {titulo}
-CONTENIDO: {contenido[:600]}
+CONTENIDO: {contenido[:800]}
 TIPO: {tipo}
 
 REGLAS:
 1. ESPAÑOL LATINO (tú, no usted)
-2. Estructura OBLIGATORIA con saltos de línea:
-   - Línea 1: Hook con emoji {emoji_header}
-   - Línea 2: Título traducido/resumido (máx 60 chars)
-   - Línea 3: Resumen de la noticia (2-3 oraciones, máx 150 chars)
-   - Línea 4: CTA para comentar
-   - Línea 5: 3 hashtags
-3. Máximo 1300 caracteres totales
-4. Emojis estratégicos (no excesivos)
-5. Incluir la INFORMACIÓN CLAVE de la noticia
+2. Estructura OBLIGATORIA:
+   
+   {emoji_header} [HOOK llamativo - 1 línea]
+   
+   🎌 [Título traducido/resumido - máx 70 chars]
+   
+   📰 [Resumen INFORMATIVO - 3-4 oraciones con datos clave: fechas, nombres, detalles importantes]
+   
+   💬 [CTA que invite a opinar sobre el tema específico]
+   
+   [3 hashtags relevantes]
+
+3. Máximo 1600 caracteres
+4. Incluir información concreta: fechas, nombres de estudios, autores, números
+5. No uses emojis en exceso, solo estratégicos
 
 FORMATO EJEMPLO:
-🚨 ¡Nueva temporada confirmada!
+🚨 ¡Final de era anunciado!
 
-Jujutsu Kaisen anuncia su temporada final para 2025. El estudio MAPPA confirma que será la conclusión del arco de Shibuya.
+🎌 Jujutsu Kaisen terminará en septiembre 2025
 
-¿Listos para el final? 👇
+📰 El manga de Jujutsu Kaisen de Gege Akutami llegará a su fin con el capítulo 271 el 20 de septiembre. La editorial Shueisha confirmó que el tomo final incluirá un epílogo inédito. La serie comenzó en 2018 y ha vendido más de 90 millones de copias.
 
-#Anime #JujutsuKaisen #NuevoAnime"""
+¿Cómo creen que terminará la historia de Yuji? ¡Teorías! 👇
+
+#JujutsuKaisen #Manga #Anime"""
 
     if AI_SERVICE == "openrouter":
         try:
@@ -149,14 +157,14 @@ Jujutsu Kaisen anuncia su temporada final para 2025. El estudio MAPPA confirma q
                     "model": "google/gemini-2.0-flash-exp:free",
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.7,
-                    "max_tokens": 400
+                    "max_tokens": 500
                 },
                 timeout=30
             )
             if resp.status_code == 200:
                 data = resp.json()
                 if 'choices' in data and len(data['choices']) > 0:
-                    return truncar_texto(data['choices'][0]['message']['content'].strip(), 1300)
+                    return truncar_texto(data['choices'][0]['message']['content'].strip(), 1600)
         except Exception as e:
             print(f"⚠️ Error OpenRouter: {e}")
     
@@ -169,84 +177,85 @@ Jujutsu Kaisen anuncia su temporada final para 2025. El estudio MAPPA confirma q
             response = client.models.generate_content(
                 model="gemini-2.0-flash",
                 contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=400)
+                config=types.GenerateContentConfig(temperature=0.7, max_output_tokens=500)
             )
             if response and response.text:
-                return truncar_texto(response.text.strip(), 1300)
+                return truncar_texto(response.text.strip(), 1600)
         except Exception as e:
             print(f"⚠️ Error Gemini: {e}")
     
     return None
 
 def redactar_manual_mejorado(titulo, contenido, tipo="noticia", fuente=""):
-    """Redacción manual estructurada y completa"""
+    """Redacción manual con más información pero estructurada"""
     
-    # Hooks por tipo
     hooks = {
-        "personaje": ["🎭 ¡Nuevo personaje revelado!", "✨ ¡Diseño de personaje filtrado!", "🔥 ¡Sobre el protagonista!"],
-        "historia": ["📖 ¡La historia avanza!", "🔮 ¡Nuevo arco confirmado!", "⚔️ ¡Plot twist anunciado!"],
-        "estreno": ["🚨 ¡Estreno confirmado!", "🎉 ¡Nueva temporada!", "✨ ¡Fecha revelada!"],
-        "noticia": ["📢 ¡Noticia importante!", "🔥 ¡Última hora anime!", "🎌 ¡Anuncio oficial!"]
+        "personaje": ["🎭 ¡Revelación de personaje!", "✨ ¡Nuevo diseño confirmado!", "🔥 ¡Sobre el protagonista!"],
+        "historia": ["📖 ¡Avance argumental!", "🔮 ¡Desarrollo confirmado!", "⚔️ ¡Giro inesperado!"],
+        "estreno": ["🚨 ¡Fechas confirmadas!", "🎉 ¡Estreno anunciado!", "✨ ¡Llega pronto!"],
+        "noticia": ["📢 ¡Información oficial!", "🔥 ¡Última hora!", "🎌 ¡Anuncio importante!"]
     }
     
-    # CTAs variados
     ctas = [
-        "¿Qué opinan? ¡Los leo! 👇",
-        "¿Emocionados? ¡Comenten! 👇",
-        "¿Lo esperaban? ¡Diganme! 👇",
-        "¿Fav o flop? ¡Debatamos! 👇"
+        "¿Qué les parece? ¡Los leo! 👇",
+        "¿Lo esperaban? ¡Cuéntenme! 👇",
+        "¿Emocionados? ¡Reaccionen! 👇",
+        "¿Opiniones? ¡Al comentario! 👇"
     ]
     
-    # Limpiar y extraer información clave
     hook = random.choice(hooks.get(tipo, hooks["noticia"]))
     cta = random.choice(ctas)
     
-    # Procesar contenido: extraer oraciones completas
+    # Extraer más oraciones con información sustancial
     oraciones = re.split(r'[.!?]+', contenido)
     oraciones = [s.strip() for s in oraciones if len(s.strip()) > 20]
     
-    # Tomar 2 oraciones con información sustancial
+    # Seleccionar hasta 4 oraciones con info relevante
     resumen_parts = []
     chars_count = 0
-    for oracion in oraciones[:3]:
-        if chars_count + len(oracion) < 180:
-            resumen_parts.append(oracion)
-            chars_count += len(oracion)
+    max_chars_resumen = 350
     
-    resumen = ". ".join(resumen_parts)
-    if not resumen:
-        resumen = contenido[:150].rsplit(' ', 1)[0] + "..."
+    for oracion in oraciones[:5]:
+        if chars_count + len(oracion) < max_chars_resumen and len(oracion) > 30:
+            # Limpiar la oración
+            oracion_limpia = re.sub(r'\s+', ' ', oracion).strip()
+            if oracion_limpia:
+                resumen_parts.append(oracion_limpia)
+                chars_count += len(oracion_limpia) + 2
+    
+    if resumen_parts:
+        resumen = ". ".join(resumen_parts) + "."
+    else:
+        resumen = contenido[:280].rsplit(' ', 1)[0] + "..."
     
     # Limpiar título
-    titulo_limpio = re.sub(r'\s+', ' ', titulo).strip()[:70]
+    titulo_limpio = re.sub(r'\s+', ' ', titulo).strip()[:75]
     
-    # Hashtags relevantes
+    # Hashtags más específicos
     hashtags_map = {
-        "personaje": "#Anime #Personajes #Otaku",
+        "personaje": "#Anime #Personajes #OtakuLife",
         "historia": "#Anime #Historia #Spoilers",
         "estreno": "#Anime #Estreno #NuevoAnime",
         "noticia": "#Anime #Noticias #Otaku"
     }
-    hashtags = hashtags_map.get(tipo, "#Anime #Otaku #Noticias")
+    hashtags = hashtags_map.get(tipo, "#Anime #Noticias #Otaku")
     
-    # Construir publicación estructurada
-    partes = [
+    # Construir con saltos de línea explícitos
+    lineas = [
         hook,
-        "",  # Línea en blanco
+        "",
         f"🎌 {titulo_limpio}",
-        "",  # Línea en blanco
-        f"📰 {resumen}.",
-        "",  # Línea en blanco
+        "",
+        f"📰 {resumen}",
+        "",
         f"💬 {cta}",
-        "",  # Línea en blanco
+        "",
         hashtags
     ]
     
-    texto = "\n".join(partes)
-    return truncar_texto(texto, MAX_CARACTERES_FB)
+    return truncar_texto("\n".join(lineas), MAX_CARACTERES_FB)
 
 def verificar_espanol(texto):
-    """Verifica español básico"""
     palabras = ["el", "la", "de", "que", "y", "en", "un", "es", "se", "no", "lo", "su", "con", "por", "para"]
     texto_lower = texto.lower()
     return sum(1 for p in palabras if f" {p} " in f" {texto_lower} ") >= 3
@@ -345,7 +354,7 @@ def extraer_web(url):
                 paragraphs = elem.find_all('p')
                 text = ' '.join([limpiar_texto(p.get_text()) for p in paragraphs if len(p.get_text()) > 25])
                 if len(text) > 100:
-                    content = text[:1000]
+                    content = text[:1200]  # Más contenido extraído
                     break
         
         imagen = None
@@ -553,7 +562,6 @@ def verificar_limite():
 # =============================================================================
 
 def publicar_facebook(mensaje, imagen_path):
-    """Publica en Facebook con manejo de límites"""
     if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
         log("❌ Faltan credenciales FB", 'error')
         return False
@@ -665,7 +673,7 @@ def publicar_solo_texto(mensaje, token):
 
 def main():
     print("\n" + "="*70)
-    print("🇯🇵 BOT ANIME V2.5 - Publicaciones ordenadas y completas")
+    print("🇯🇵 BOT ANIME V2.6 - Más info, formato ordenado")
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"🤖 IA: {AI_SERVICE or 'Manual'} | FB: {'✅' if FB_ACCESS_TOKEN else '❌'}")
     print("="*70)
@@ -727,13 +735,13 @@ def main():
     
     mensaje_final = truncar_texto(mensaje_final, MAX_CARACTERES_FB)
     
-    # Mostrar preview formateada
-    print(f"\n{'='*50}")
-    print(f"📝 PREVIEW:")
-    print(f"{'='*50}")
+    # Preview formateada
+    print(f"\n{'='*60}")
+    print(f"📱 PREVIEW DE PUBLICACIÓN:")
+    print(f"{'='*60}")
     print(mensaje_final)
-    print(f"{'='*50}")
-    print(f"📊 Stats: {len(mensaje_final)} chars | Tipo: {seleccionada['tipo']} | Score: {seleccionada['puntaje']}")
+    print(f"{'='*60}")
+    print(f"📊 {len(mensaje_final)} caracteres | Tipo: {seleccionada['tipo']}")
     
     log("🖼️ Procesando imagen...", 'info')
     img_path = descargar_imagen(imagen_url) if imagen_url else None
