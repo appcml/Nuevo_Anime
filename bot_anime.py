@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bot Anime V2.2 - Con alternativas gratuitas a Gemini
+Bot Anime V2.3 - Español Latino + CTAs para Engagement
 Usa: OpenRouter (gratis) o redacción manual mejorada
 """
 
@@ -91,11 +91,11 @@ PALABRAS_ANIME = {
 }
 
 # =============================================================================
-# REDACCIÓN CON IA (OpenRouter o Gemini)
+# REDACCIÓN CON IA (OpenRouter o Gemini) - ESPAÑOL LATINO
 # =============================================================================
 
 def redactar_con_ia(titulo, contenido, tipo="noticia"):
-    """Usa OpenRouter (gratis) o Gemini para redactar"""
+    """Usa OpenRouter (gratis) o Gemini para redactar en español latino"""
     
     emojis = {
         "personaje": "🎭🎌✨🌟💫🗡️🛡️⚡🔥🎨",
@@ -106,30 +106,48 @@ def redactar_con_ia(titulo, contenido, tipo="noticia"):
     
     emoji_set = emojis.get(tipo, emojis["noticia"])
     
-    prompt = f"""Eres un influencer de anime en Instagram/Facebook. Crea una publicación viral y emocionante.
+    # CTAs agresivos para engagement
+    ctas_ejemplos = [
+        "🔥 ¿Team Sub o Team Dub? ¡Defiendan su posición en los comentarios!",
+        "💬 ¿Cuál es su anime favorito de esta temporada? ¡Los leo a todos!",
+        "⚔️ ¿Creen que superará a la temporada anterior? ¡Dejen su opinión!",
+        "🎯 ¿A cuántos les emociona esto? ¡Comenten con un emoji!",
+        "💥 ¿Qué personaje quieren ver más? ¡Diganme en los comentarios!",
+        "🤔 ¿Buena decisión o terrible error? ¡Debatamos abajo!",
+        "⭐ Del 1 al 10, ¿qué hype tienen? ¡Justifiquen su respuesta!",
+        "🎭 ¿Quién es su waifu/husbando favorito? ¡Los quiero ver comentando!",
+        "📢 ¿Se lo recomendarían a un amigo nuevo en el anime? ¡Digan por qué!",
+        "⚡ ¿Mejor opening de la historia o sobrevalorado? ¡Discutamos!"
+    ]
+    
+    prompt = f"""Eres un influencer de anime en Instagram/Facebook. Crea una publicación viral y emocionante EN ESPAÑOL LATINO.
 
 TÍTULO: {titulo}
 CONTENIDO: {contenido[:500]}
 TIPO: {tipo}
 
-REGLAS:
-1. ESPAÑOL latino, joven y entusiasta
+REGLAS OBLIGATORIAS:
+1. ESPAÑOL LATINO exclusivamente - joven, entusiasta y natural (no uses "usted", usa "tú")
 2. USA MUCHOS EMOJIS: {emoji_set}
 3. Primera línea HOOK llamativo con 🚨 o 🔥
 4. Máximo 1400 caracteres
 5. 3-4 hashtags al final: #Anime #Otaku #NuevoAnime
-6. PREGUNTA final para engagement
+6. CTA final AGRESIVO para comentarios (pregunta controversial o que invite opinión fuerte)
+
+EJEMPLOS DE CTAS (usa uno similar o adaptado):
+{random.choice(ctas_ejemplos)}
+{random.choice(ctas_ejemplos)}
 
 FORMATO:
-🚨 [HOOK impactante]
+🚨 [HOOK impactante en español]
 
-[Cuerpo con emojis y emoción]
+[Cuerpo con emojis y emoción en español]
 
 📎 Fuente: [breve]
 
 [Hashtags]
 
-¿Te emociona? 👇"""
+[CTA fuerte para comentarios] 👇"""
 
     # Intentar OpenRouter (gratis)
     if AI_SERVICE == "openrouter":
@@ -177,48 +195,61 @@ FORMATO:
     return None
 
 def redactar_manual_mejorado(titulo, contenido, tipo="noticia", fuente=""):
-    """Redacción manual mejorada con templates variados"""
+    """Redacción manual mejorada con templates variados en español latino"""
     
     hooks = {
         "personaje": [
-            "🎭 ¡Personaje que está rompiendo el internet! 🔥",
-            "✨ Este personaje tiene a todos hablando... 🗣️",
-            "🚨 ¡Revelan detalles de nuestro protagonista favorito! 💫"
+            "🎭 ¡Este personaje está rompiendo el internet! 🔥",
+            "✨ El personaje que tiene a todos hablando... 🗣️",
+            "🚨 ¡Revelan detalles exclusivos de nuestro protagonista! 💫",
+            "🔥 ¡Nuevo diseño de personaje filtrado! ¿Opiniones? 🎭"
         ],
         "historia": [
-            "📖 ¡La historia que cambiará todo! 🚨",
+            "📖 ¡La historia que cambiará TODO! 🚨",
             "🔮 ¿Listos para esta trama épica? ✨",
-            "🎪 ¡Nuevo arco argumental confirmado! 🚨"
+            "🎪 ¡Nuevo arco argumental confirmado! 🚨",
+            "⚔️ ¡Plot twist inesperado! ¿Lo venían venir? 📖"
         ],
         "estreno": [
-            "🚨 ¡ESTRENO ANUNCIADO! Marquen sus calendarios 🗓️",
-            "🔥 ¡Nuevo anime confirmado! La hype es real ✨",
-            "🎉 ¡Fecha de estreno revelada! ¿Emocionados? 🚨"
+            "🚨 ¡ESTRENO CONFIRMADO! Marquen sus calendarios 🗓️",
+            "🔥 ¡Nuevo anime anunciado! La hype es REAL ✨",
+            "🎉 ¡Fecha de estreno revelada! ¿Emocionados? 🚨",
+            "✨ ¡Se acerca la nueva temporada! ¿Preparados? 🎌"
         ],
         "noticia": [
             "🚨 ¡Última hora del mundo anime! 🔥",
             "📢 Noticia que acaba de caer... ✨",
-            "🎌 ¡Anuncio importante para los otakus! 🚨"
+            "🎌 ¡Anuncio importante para todos los otakus! 🚨",
+            "🔥 ¡Bomba informativa! Esto cambia todo... 💥"
         ]
     }
     
-    cierres = [
-        "\n\n💬 ¿Qué opinan? ¡Los leo! 👇",
-        "\n\n🔥 ¿Hype o no hype? Comenten 👇",
-        "\n\n✨ ¿Lo esperaban? ¡Diganme! 👇",
-        "\n\n🎭 ¿Favoritos? ¡Los quiero ver! 👇"
+    # CTAs agresivos para engagement máximo
+    ctas = [
+        "\n\n🔥 ¿Team Sub o Team Dub? ¡Defiendan su posición en los comentarios! 👇",
+        "\n\n💬 ¿Cuál es su anime favorito del momento? ¡Los leo a todos! 👇",
+        "\n\n⚔️ ¿Creen que superará a las expectativas? ¡Dejen su opinión! 👇",
+        "\n\n🎯 ¿A cuántos les emociona esto? ¡Comenten con emojis! 👇",
+        "\n\n💥 ¿Qué esperan de esto? ¡Diganme abajo! 👇",
+        "\n\n🤔 ¿Buena decisión o terrible error? ¡Debatamos! 👇",
+        "\n\n⭐ Del 1 al 10, ¿qué hype tienen? ¡Justifiquen! 👇",
+        "\n\n🎭 ¿Quién es su waifu/husbando favorito? ¡Los quiero ver comentando! 👇",
+        "\n\n📢 ¿Se lo recomendarían a un amigo nuevo? ¡Digan por qué! 👇",
+        "\n\n⚡ ¿Mejor opening de la historia o sobrevalorado? ¡Discutamos! 👇",
+        "\n\n🎌 ¿Ustedes lo van a ver? ¡Diganme sí o no! 👇",
+        "\n\n💫 ¿Qué les gustaría ver en esta nueva temporada? ¡Ideas abajo! 👇"
     ]
     
     hook = random.choice(hooks.get(tipo, hooks["noticia"]))
-    cierre = random.choice(cierres)
+    cta = random.choice(ctas)  # CTA aleatorio para variar
     
     # Resumir contenido
-    resumen = contenido[:300].strip()
-    if len(resumen) > 280:
-        resumen = resumen[:280].rsplit(' ', 1)[0] + "..."
+    resumen = contenido[:280].strip()
+    if len(resumen) > 250:
+        resumen = resumen[:250].rsplit(' ', 1)[0] + "..."
     
     hashtags = {
-        "personaje": "#Anime #Personajes #Otaku #Manga #Seiyuu",
+        "personaje": "#Anime #Personajes #Otaku #Manga #Waifu",
         "historia": "#Anime #Historia #Otaku #Spoilers #Manga",
         "estreno": "#Anime #Estreno #NuevoAnime #Otaku #Hype",
         "noticia": "#Anime #NoticiasAnime #Otaku #NuevoAnime #Manga"
@@ -230,18 +261,25 @@ def redactar_manual_mejorado(titulo, contenido, tipo="noticia", fuente=""):
 
 {resumen}
 
-📎 Fuente: {fuente}{cierre}
+📎 Fuente: {fuente}{cta}
 
 {hashtags.get(tipo, hashtags["noticia"])}
 — Nuevo Anime 🎌"""
 
     return texto
 
+def verificar_espanol(texto):
+    """Verifica que el texto esté en español básico"""
+    palabras_espanol = ["el", "la", "de", "que", "y", "en", "un", "ser", "se", "no", "lo", "su", "le", "más", "pero", "sus", "del", "al", "con", "por", "para", "es", "son", "fue", "han", "hay", "su", "mi", "tu"]
+    texto_lower = texto.lower()
+    count = sum(1 for palabra in palabras_espanol if f" {palabra} " in f" {texto_lower} ")
+    return count >= 3  # Al menos 3 palabras comunes en español
+
 def detectar_tipo(titulo, desc):
     texto = f"{titulo} {desc}".lower()
-    if any(p in texto for p in ["personaje", "protagonista", "seiyuu", "cast"]): return "personaje"
-    if any(p in texto for p in ["historia", "trama", "sinopsis", "arco", "saga"]): return "historia"
-    if any(p in texto for p in ["estreno", "trailer", "nuevo anime", "anunciado", "fecha"]): return "estreno"
+    if any(p in texto for p in ["personaje", "protagonista", "seiyuu", "cast", "diseño", "apariencia"]): return "personaje"
+    if any(p in texto for p in ["historia", "trama", "sinopsis", "arco", "saga", "plot", "twist"]): return "historia"
+    if any(p in texto for p in ["estreno", "trailer", "nuevo anime", "anunciado", "fecha", "temporada", "próximo"]): return "estreno"
     return "noticia"
 
 # =============================================================================
@@ -552,7 +590,6 @@ def publicar_facebook(mensaje, imagen_path):
     # Primero: verificar qué tipo de token tenemos y sus permisos
     try:
         # Debug token
-        app_token = f"{FB_PAGE_ID}|{FB_ACCESS_TOKEN}"  # Esto es incorrecto, solo para debug
         debug_url = "https://graph.facebook.com/v22.0/debug_token"
         debug_params = {
             'input_token': FB_ACCESS_TOKEN,
@@ -691,7 +728,7 @@ def publicar_solo_texto(mensaje, token):
 
 def main():
     print("\n" + "="*70)
-    print("🇯🇵 BOT ANIME V2.2 - OpenRouter + Facebook API v22")
+    print("🇯🇵 BOT ANIME V2.3 - Español Latino + CTAs Engagement")
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"🤖 IA: {AI_SERVICE or 'Manual'} | FB: {'✅' if FB_ACCESS_TOKEN else '❌'}")
     print("="*70)
@@ -735,17 +772,28 @@ def main():
             texto_ia = redactar_con_ia(noticia['titulo'], texto, noticia['tipo'])
             if texto_ia:
                 mensaje_final = texto_ia
-                log("✅ Texto generado por IA", 'exito')
+                # Verificar que esté en español
+                if not verificar_espanol(mensaje_final):
+                    log("⚠️ IA no generó español, usando manual...", 'advertencia')
+                    mensaje_final = redactar_manual_mejorado(noticia['titulo'], texto, noticia['tipo'], noticia['fuente'])
+                else:
+                    log("✅ Texto generado por IA en español", 'exito')
             else:
                 mensaje_final = redactar_manual_mejorado(noticia['titulo'], texto, noticia['tipo'], noticia['fuente'])
-                log("✅ Texto manual", 'info')
+                log("✅ Texto manual en español", 'info')
             break
     
     if not seleccionada or not mensaje_final:
         log("❌ No procesable", 'error')
         return False
     
+    # Verificación final de español
+    if not verificar_espanol(mensaje_final):
+        log("⚠️ Texto no parece estar en español, regenerando...", 'advertencia')
+        mensaje_final = redactar_manual_mejorado(seleccionada['titulo'], texto, seleccionada['tipo'], seleccionada['fuente'])
+    
     print(f"\n📝 {seleccionada['titulo'][:55]}... | {seleccionada['tipo']} | {seleccionada['puntaje']}pts")
+    print(f"🎯 CTA incluido: {'👇' in mensaje_final}")
     
     # Imagen
     log("🖼️ Procesando imagen...", 'info')
