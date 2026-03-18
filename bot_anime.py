@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Bot de Noticias Anime para Facebook - V2.1 (API ACTUALIZADA)
-Correcciones: Google GenAI + Facebook Graph API v22 + Manejo de errores
+Bot Anime V2.2 - Con alternativas gratuitas a Gemini
+Usa: OpenRouter (gratis) o redacción manual mejorada
 """
 
 import requests
@@ -15,16 +15,17 @@ import random
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from difflib import SequenceMatcher
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 # =============================================================================
-# CONFIGURACIÓN - NUEVA API DE GOOGLE GENAI
+# CONFIGURACIÓN
 # =============================================================================
 
 NEWS_API_KEY = os.getenv('NEWS_API_KEY')
 FB_PAGE_ID = os.getenv('FB_PAGE_ID')
 FB_ACCESS_TOKEN = os.getenv('FB_ACCESS_TOKEN')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')  # NUEVO: Alternativa gratuita
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 HISTORIAL_PATH = os.getenv('HISTORIAL_PATH', os.path.join(BASE_DIR, 'data', 'historial_anime.json'))
@@ -34,33 +35,45 @@ TIEMPO_ENTRE_PUBLICACIONES = 60
 MAX_PUBLICACIONES_DIA = 24
 UMBRAL_SIMILITUD_TITULO = 0.80
 
-# NUEVO: Inicialización de Gemini con google-genai (API actualizada)
-model = None
-if GEMINI_API_KEY:
+# Detectar qué servicio de IA usar (prioridad: OpenRouter > Gemini > Manual)
+AI_SERVICE = None
+
+# 1. Intentar OpenRouter (gratis, no requiere tarjeta)
+if OPENROUTER_API_KEY:
+    try:
+        test_resp = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"},
+            json={"model": "google/gemini-2.0-flash-exp:free", "messages": [{"role": "user", "content": "hola"}]},
+            timeout=10
+        )
+        if test_resp.status_code == 200:
+            AI_SERVICE = "openrouter"
+            print("✅ OpenRouter conectado (Gemini Flash Free)")
+    except Exception as e:
+        print(f"⚠️ OpenRouter no disponible: {e}")
+
+# 2. Intentar Gemini (si no hay cuota agotada)
+if not AI_SERVICE and GEMINI_API_KEY:
     try:
         from google import genai
-        from google.genai import types
-        
         client = genai.Client(api_key=GEMINI_API_KEY)
-        # Verificar que funciona
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents="Hola"
-        )
-        model = client  # Guardar el cliente
-        print("✅ Gemini AI 2.0 Flash conectado correctamente")
+        # Test simple
+        test = client.models.generate_content(model="gemini-2.0-flash", contents="hola")
+        AI_SERVICE = "gemini"
+        print("✅ Gemini conectado")
     except Exception as e:
-        print(f"⚠️ Error conectando Gemini: {e}")
-        model = None
-else:
-    print("⚠️ No se encontró GEMINI_API_KEY - Se usará redacción básica")
+        print(f"⚠️ Gemini no disponible: {e}")
+
+if not AI_SERVICE:
+    print("⚠️ Sin servicio de IA - usando redacción manual mejorada")
 
 # =============================================================================
-# FUENTES RSS OPTIMIZADAS (solo las que funcionan)
+# FUENTES RSS
 # =============================================================================
 
 RSS_FEEDS = [
-    'https://somoskudasai.com/feed/',  # URL corregida
+    'https://somoskudasai.com/feed/',
     'https://www.animenewsnetwork.com/all/rss.xml',
     'https://myanimelist.net/rss/news.xml',
     'https://otakumode.com/news/feed',
@@ -69,107 +82,170 @@ RSS_FEEDS = [
     'https://www.anime-planet.com/rss',
 ]
 
-PALABRAS_ANIME_POPULAR = [
-    "attack on titan", "demon slayer", "jujutsu kaisen", "my hero academia", 
-    "one piece", "spy x family", "chainsaw man", "dragon ball", "naruto",
-    "bleach", "hunter x hunter", "evangelion", "studio ghibli"
-]
-
-PALABRAS_PERSONAJES = [
-    "personaje", "protagonista", "seiyuu", "tanjiro", "goku", "luffy", 
-    "gojo", "denji", "anya", "deku"
-]
-
-PALABRAS_HISTORIA = ["historia", "trama", "sinopsis", "arco", "saga", "temporada"]
-PALABRAS_ESTRENO = ["estreno", "trailer", "nuevo anime", "temporada", "anunciado"]
+PALABRAS_ANIME = {
+    "attack on titan": 20, "demon slayer": 20, "kimetsu": 20, "jujutsu kaisen": 20,
+    "my hero academia": 18, "one piece": 18, "spy x family": 18, "chainsaw man": 18,
+    "dragon ball": 15, "naruto": 15, "bleach": 15, "hunter x hunter": 15,
+    "evangelion": 15, "studio ghibli": 15, "temporada": 12, "estreno": 12,
+    "trailer": 10, "nuevo anime": 10, "personaje": 8, "protagonista": 8
+}
 
 # =============================================================================
-# REDACCIÓN CON GEMINI 2.0 (API NUEVA)
+# REDACCIÓN CON IA (OpenRouter o Gemini)
 # =============================================================================
 
-def redactar_con_gemini(titulo, contenido, tipo="noticia"):
-    """Usa Gemini 2.0 Flash para redactar publicaciones"""
-    if not model:
-        return None
+def redactar_con_ia(titulo, contenido, tipo="noticia"):
+    """Usa OpenRouter (gratis) o Gemini para redactar"""
     
-    try:
-        emojis_por_tipo = {
-            "personaje": "🎭🎌✨🌟💫🗡️🛡️⚡🔥",
-            "historia": "📖✨🎭🔮🌟⚔️🛡️💫🎪",
-            "noticia": "🎌🔥✨📢🚨🎉🎊🌟💥⚡"
-        }
-        
-        emojis = emojis_por_tipo.get(tipo, "✨🎌🔥")
-        
-        prompt = f"""Eres un redactor experto en anime para redes sociales. Crea una publicación viral para Facebook.
+    emojis = {
+        "personaje": "🎭🎌✨🌟💫🗡️🛡️⚡🔥🎨",
+        "historia": "📖✨🎭🔮🌟⚔️🛡️💫🎪🎬",
+        "estreno": "🚨🎉🎊✨🎌🔥💥⚡🎪",
+        "noticia": "🎌🔥✨📢🚨🎉🌟💥⚡🎭"
+    }
+    
+    emoji_set = emojis.get(tipo, emojis["noticia"])
+    
+    prompt = f"""Eres un influencer de anime en Instagram/Facebook. Crea una publicación viral y emocionante.
 
 TÍTULO: {titulo}
-CONTENIDO: {contenido[:600]}
+CONTENIDO: {contenido[:500]}
 TIPO: {tipo}
 
-INSTRUCCIONES:
-1. Escribe en español, entusiasta y natural
-2. Usa MUCHOS emojis relevantes: {emojis}
-3. Máximo 1500 caracteres
-4. Incluye hashtags: #Anime #Otaku #NuevoAnime
-5. Termina con pregunta para engagement
-6. Destaca lo más importante primero
+REGLAS:
+1. ESPAÑOL latino, joven y entusiasta
+2. USA MUCHOS EMOJIS: {emoji_set}
+3. Primera línea HOOK llamativo con 🚨 o 🔥
+4. Máximo 1400 caracteres
+5. 3-4 hashtags al final: #Anime #Otaku #NuevoAnime
+6. PREGUNTA final para engagement
 
 FORMATO:
-🚨 [Título llamativo con emojis]
+🚨 [HOOK impactante]
 
-[Cuerpo con emojis y entusiasmo]
+[Cuerpo con emojis y emoción]
 
-📎 Fuente: [mención breve]
+📎 Fuente: [breve]
 
 [Hashtags]
 
-¿Qué opinas? 👇"""
+¿Te emociona? 👇"""
 
-        response = model.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.8,
-                max_output_tokens=800,
-                safety_settings=[
-                    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
-                    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
-                    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
-                    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
-                ]
+    # Intentar OpenRouter (gratis)
+    if AI_SERVICE == "openrouter":
+        try:
+            resp = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://github.com",  # Requerido por OpenRouter
+                    "X-Title": "Anime Bot"
+                },
+                json={
+                    "model": "google/gemini-2.0-flash-exp:free",  # Modelo gratuito
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.8,
+                    "max_tokens": 600
+                },
+                timeout=30
             )
-        )
-        
-        if response and response.text:
-            return response.text.strip()
-        return None
-        
-    except Exception as e:
-        print(f"⚠️ Error Gemini: {e}")
-        return None
-
-def detectar_tipo_contenido(titulo, descripcion):
-    texto = f"{titulo} {descripcion}".lower()
-    if any(p in texto for p in PALABRAS_PERSONAJES[:3]): return "personaje"
-    if any(p in texto for p in PALABRAS_HISTORIA[:3]): return "historia"
-    if any(p in texto for p in PALABRAS_ESTRENO[:3]): return "estreno"
-    return "noticia"
-
-def generar_texto_manual(titulo, contenido, tipo="noticia", fuente=""):
-    """Fallback si Gemini no funciona"""
-    emojis = random.choice(["🎌", "✨", "🔥", "💫", "🌟", "🚨"])
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'choices' in data and len(data['choices']) > 0:
+                    return data['choices'][0]['message']['content'].strip()
+        except Exception as e:
+            print(f"⚠️ Error OpenRouter: {e}")
     
-    plantillas = {
-        "personaje": f"{emojis} ¡Personaje destacado! 🎭\n\n{titulo}\n\n{contenido[:350]}...\n\n💬 ¿Favorito? 👇\n\n#Anime #Personajes",
-        "historia": f"{emojis} ¡Historia épica! 📖\n\n{titulo}\n\n{contenido[:350]}...\n\n🔮 ¿La viste? 🤫\n\n#Anime #Historia",
-        "noticia": f"{emojis} ¡Noticia anime! 🚨\n\n{titulo}\n\n{contenido[:350]}...\n\n🤔 ¿Opiniones? 👇\n\n#Anime #Noticias"
+    # Intentar Gemini
+    if AI_SERVICE == "gemini":
+        try:
+            from google import genai
+            from google.genai import types
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.8, max_output_tokens=600)
+            )
+            if response and response.text:
+                return response.text.strip()
+        except Exception as e:
+            print(f"⚠️ Error Gemini: {e}")
+    
+    return None
+
+def redactar_manual_mejorado(titulo, contenido, tipo="noticia", fuente=""):
+    """Redacción manual mejorada con templates variados"""
+    
+    hooks = {
+        "personaje": [
+            "🎭 ¡Personaje que está rompiendo el internet! 🔥",
+            "✨ Este personaje tiene a todos hablando... 🗣️",
+            "🚨 ¡Revelan detalles de nuestro protagonista favorito! 💫"
+        ],
+        "historia": [
+            "📖 ¡La historia que cambiará todo! 🚨",
+            "🔮 ¿Listos para esta trama épica? ✨",
+            "🎪 ¡Nuevo arco argumental confirmado! 🚨"
+        ],
+        "estreno": [
+            "🚨 ¡ESTRENO ANUNCIADO! Marquen sus calendarios 🗓️",
+            "🔥 ¡Nuevo anime confirmado! La hype es real ✨",
+            "🎉 ¡Fecha de estreno revelada! ¿Emocionados? 🚨"
+        ],
+        "noticia": [
+            "🚨 ¡Última hora del mundo anime! 🔥",
+            "📢 Noticia que acaba de caer... ✨",
+            "🎌 ¡Anuncio importante para los otakus! 🚨"
+        ]
     }
     
-    return plantillas.get(tipo, plantillas["noticia"])
+    cierres = [
+        "\n\n💬 ¿Qué opinan? ¡Los leo! 👇",
+        "\n\n🔥 ¿Hype o no hype? Comenten 👇",
+        "\n\n✨ ¿Lo esperaban? ¡Diganme! 👇",
+        "\n\n🎭 ¿Favoritos? ¡Los quiero ver! 👇"
+    ]
+    
+    hook = random.choice(hooks.get(tipo, hooks["noticia"]))
+    cierre = random.choice(cierres)
+    
+    # Resumir contenido
+    resumen = contenido[:300].strip()
+    if len(resumen) > 280:
+        resumen = resumen[:280].rsplit(' ', 1)[0] + "..."
+    
+    hashtags = {
+        "personaje": "#Anime #Personajes #Otaku #Manga #Seiyuu",
+        "historia": "#Anime #Historia #Otaku #Spoilers #Manga",
+        "estreno": "#Anime #Estreno #NuevoAnime #Otaku #Hype",
+        "noticia": "#Anime #NoticiasAnime #Otaku #NuevoAnime #Manga"
+    }
+    
+    texto = f"""{hook}
+
+🎌 {titulo}
+
+{resumen}
+
+📎 Fuente: {fuente}{cierre}
+
+{hashtags.get(tipo, hashtags["noticia"])}
+— Nuevo Anime 🎌"""
+
+    return texto
+
+def detectar_tipo(titulo, desc):
+    texto = f"{titulo} {desc}".lower()
+    if any(p in texto for p in ["personaje", "protagonista", "seiyuu", "cast"]): return "personaje"
+    if any(p in texto for p in ["historia", "trama", "sinopsis", "arco", "saga"]): return "historia"
+    if any(p in texto for p in ["estreno", "trailer", "nuevo anime", "anunciado", "fecha"]): return "estreno"
+    return "noticia"
 
 # =============================================================================
-# FUNCIONES UTILITARIAS
+# UTILIDADES
 # =============================================================================
 
 def log(mensaje, tipo='info'):
@@ -193,14 +269,13 @@ def guardar_json(ruta, datos):
             json.dump(datos, f, ensure_ascii=False, indent=2)
         return True
     except Exception as e:
-        log(f"Error guardando JSON: {e}", 'error')
+        log(f"Error guardando: {e}", 'error')
         return False
 
 def generar_hash(texto):
     if not texto: return ""
     t = re.sub(r'[^\w\s]', '', texto.lower().strip())
-    t = re.sub(r'\s+', ' ', t)
-    return hashlib.md5(t.encode()).hexdigest()
+    return hashlib.md5(re.sub(r'\s+', ' ', t).encode()).hexdigest()
 
 def normalizar_url(url):
     if not url: return ""
@@ -209,8 +284,7 @@ def normalizar_url(url):
         netloc = re.sub(r'^(www\.|m\.)', '', parsed.netloc.lower())
         path = re.sub(r'/index\.html?$', '/', parsed.path.lower().rstrip('/'))
         return f"{netloc}{path}"
-    except:
-        return url.lower().strip()
+    except: return url.lower().strip()
 
 def calcular_similitud(t1, t2):
     if not t1 or not t2: return 0.0
@@ -227,24 +301,21 @@ def limpiar_texto(texto):
 
 def calcular_puntaje(titulo, desc):
     txt = f"{titulo} {desc}".lower()
-    p = sum(15 for f in PALABRAS_ANIME_POPULAR if f in txt)
-    p += sum(10 for f in PALABRAS_ESTRENO if f in txt)
-    p += 5 if 20 <= len(titulo) <= 120 else 0
-    return min(p, 100)
+    p = sum(puntos for palabra, puntos in PALABRAS_ANIME.items() if palabra in txt)
+    return min(p + 5, 100) if 20 <= len(titulo) <= 120 else min(p, 100)
 
-def es_contenido_repetido(titulo, desc, historial):
+def es_repetido(titulo, historial):
     if not historial: return False
-    titulo_hash = generar_hash(titulo)
-    if titulo_hash in historial.get('hashes_titulos', []): return True
+    if generar_hash(titulo) in historial.get('hashes_titulos', []): return True
     for t in historial.get('titulos', []):
         if calcular_similitud(titulo, t) >= UMBRAL_SIMILITUD_TITULO: return True
     return False
 
 # =============================================================================
-# EXTRACCIÓN DE CONTENIDO
+# EXTRACCIÓN Y PROCESAMIENTO
 # =============================================================================
 
-def extraer_contenido_web(url):
+def extraer_web(url):
     if not url: return None, None
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -254,13 +325,13 @@ def extraer_contenido_web(url):
         for elem in soup(['script', 'style', 'nav', 'header', 'footer']): elem.decompose()
         
         content = None
-        for selector in ['article', '.entry-content', '.post-content', 'main']:
+        for selector in ['article', '.entry-content', '.post-content', 'main', '.content']:
             elem = soup.select_one(selector)
             if elem:
                 paragraphs = elem.find_all('p')
-                text = ' '.join([limpiar_texto(p.get_text()) for p in paragraphs if len(p.get_text()) > 30])
-                if len(text) > 200:
-                    content = text[:1500]
+                text = ' '.join([limpiar_texto(p.get_text()) for p in paragraphs if len(p.get_text()) > 25])
+                if len(text) > 150:
+                    content = text[:1200]
                     break
         
         imagen = None
@@ -277,7 +348,7 @@ def extraer_contenido_web(url):
 
 def descargar_imagen(url):
     if not url: return None
-    for bad in ['google.com', 'gstatic.com', 'facebook.com', 'logo', 'icon']:
+    for bad in ['google.com', 'gstatic.com', 'facebook.com', 'logo', 'icon', 'favicon']:
         if bad in url.lower(): return None
     
     try:
@@ -285,8 +356,7 @@ def descargar_imagen(url):
         from io import BytesIO
         
         r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, stream=True)
-        content_type = r.headers.get('content-type', '')
-        if 'image' not in content_type: return None
+        if 'image' not in r.headers.get('content-type', ''): return None
         
         img = Image.open(BytesIO(r.content))
         w, h = img.size
@@ -311,49 +381,61 @@ def crear_imagen_default(titulo):
         from PIL import Image, ImageDraw, ImageFont
         import textwrap
         
-        img = Image.new('RGB', (1200, 630), color='#1a1a2e')
+        # Crear gradiente simple
+        img = Image.new('RGB', (1200, 630), color='#0f0f23')
         draw = ImageDraw.Draw(img)
         
-        draw.rectangle([(0, 0), (1200, 15)], fill='#e94560')
-        draw.rectangle([(0, 615), (1200, 630)], fill='#16213e')
+        # Decoraciones
+        draw.rectangle([(0, 0), (1200, 8)], fill='#ff006e')
+        draw.rectangle([(0, 622), (1200, 630)], fill='#3a0ca3')
         
-        try:
-            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
-            font_sub = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 28)
-        except:
+        # Intentar cargar fuentes del sistema
+        fonts_to_try = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",  # macOS
+            "C:/Windows/Fonts/arial.ttf"  # Windows
+        ]
+        
+        font_title = font_sub = None
+        for font_path in fonts_to_try:
+            try:
+                if os.path.exists(font_path):
+                    font_title = ImageFont.truetype(font_path, 46)
+                    font_sub = ImageFont.truetype(font_path, 26)
+                    break
+            except: continue
+        
+        if not font_title:
             font_title = font_sub = ImageFont.load_default()
         
-        wrapped = textwrap.fill(titulo[:100], width=30)
+        wrapped = textwrap.fill(titulo[:90], width=32)
         lines = wrapped.split('\n')
-        y_start = (630 - len(lines) * 60) // 2 - 20
+        y_start = (630 - len(lines) * 55) // 2 - 10
         
         for i, line in enumerate(lines):
-            draw.text((60, y_start + i * 60), line, font=font_title, fill='#ffffff')
+            draw.text((60, y_start + i * 55), line, font=font_title, fill='#ffffff')
         
-        draw.text((60, 540), "🇯🇵 Noticias Anime", font=font_sub, fill='#e94560')
-        draw.text((60, 580), "🎌 Nuevo Anime", font=font_sub, fill='#a0a0a0')
+        draw.text((60, 550), "🇯🇵 Noticias Anime | Nuevo Anime", font=font_sub, fill='#ff006e')
+        draw.text((60, 590), "🎌 Tu fuente otaku de confianza", font=font_sub, fill='#a0a0a0')
         
-        path = f'/tmp/anime_default_{generar_hash(titulo)[:8]}.jpg'
+        path = f'/tmp/anime_def_{generar_hash(titulo)[:8]}.jpg'
         img.save(path, 'JPEG', quality=95)
         return path
     except Exception as e:
         log(f"Error imagen default: {e}", 'error')
         return None
 
-# =============================================================================
-# FUENTES DE NOTICIAS
-# =============================================================================
-
-def obtener_rss_anime():
+def obtener_noticias():
     noticias = []
     for feed_url in RSS_FEEDS:
         try:
-            log(f"📡 RSS: {feed_url[:50]}...", 'debug')
+            log(f"📡 {feed_url[:45]}...", 'debug')
             feed = feedparser.parse(feed_url, request_headers={'User-Agent': 'Mozilla/5.0'})
-            
             if not feed or not feed.entries: continue
             
-            for entry in feed.entries[:6]:
+            for entry in feed.entries[:5]:
                 titulo = entry.get('title', '').strip()
                 if not titulo or '[Removed]' in titulo: continue
                 
@@ -361,19 +443,17 @@ def obtener_rss_anime():
                 if not link: continue
                 
                 desc = limpiar_texto(entry.get('summary', '') or entry.get('description', ''))
-                desc = re.sub(r'<[^>]+>', '', desc)
                 
                 imagen = None
                 if 'media_content' in entry:
                     imagen = entry.media_content[0].get('url')
                 elif 'links' in entry:
-                    for link_obj in entry.links:
-                        if link_obj.get('type', '').startswith('image/'):
-                            imagen = link_obj.get('href')
+                    for l in entry.links:
+                        if l.get('type', '').startswith('image/'):
+                            imagen = l.get('href')
                             break
                 
-                tipo = detectar_tipo_contenido(titulo, desc)
-                
+                tipo = detectar_tipo(titulo, desc)
                 noticias.append({
                     'titulo': limpiar_texto(titulo),
                     'descripcion': desc,
@@ -387,7 +467,7 @@ def obtener_rss_anime():
             log(f"Error RSS: {e}", 'debug')
             continue
     
-    log(f"📰 Total: {len(noticias)} noticias", 'info')
+    log(f"📰 Total: {len(noticias)}", 'info')
     return noticias
 
 def extraer_dominio(url):
@@ -396,28 +476,26 @@ def extraer_dominio(url):
         netloc = parsed.netloc.lower()
         parts = netloc.split('.')
         return '.'.join(parts[-2:]) if len(parts) > 2 else netloc
-    except:
-        return "anime"
+    except: return "anime"
 
 # =============================================================================
-# HISTORIAL Y ESTADO
+# HISTORIAL
 # =============================================================================
 
 def cargar_historial():
     default = {
         'urls': [], 'urls_normalizadas': [], 'hashes_titulos': [],
         'titulos': [], 'timestamps': [],
-        'estadisticas': {'total_publicadas': 0, 'hoy': 0, 'ultima_fecha': None}
+        'estadisticas': {'total': 0, 'hoy': 0, 'fecha': None}
     }
     h = cargar_json(HISTORIAL_PATH, default)
     for k in default:
         if k not in h: h[k] = default[k]
     return h
 
-def guardar_historial(historial, url, titulo, desc):
+def guardar_historial(historial, url, titulo):
     url_norm = normalizar_url(url)
     if url_norm in historial.get('urls_normalizadas', []):
-        log("⚠️ URL ya existe", 'advertencia')
         return historial
     
     historial['urls'].append(url)
@@ -425,224 +503,277 @@ def guardar_historial(historial, url, titulo, desc):
     historial['hashes_titulos'].append(generar_hash(titulo))
     historial['titulos'].append(titulo)
     historial['timestamps'].append(datetime.now().isoformat())
-    historial['estadisticas']['total_publicadas'] += 1
+    historial['estadisticas']['total'] += 1
     historial['estadisticas']['hoy'] += 1
-    historial['estadisticas']['ultima_fecha'] = datetime.now().strftime('%Y-%m-%d')
+    historial['estadisticas']['fecha'] = datetime.now().strftime('%Y-%m-%d')
     
     for key in ['urls', 'urls_normalizadas', 'hashes_titulos', 'titulos', 'timestamps']:
-        if len(historial[key]) > 250:
-            historial[key] = historial[key][-250:]
+        if len(historial[key]) > 200:
+            historial[key] = historial[key][-200:]
     
     guardar_json(HISTORIAL_PATH, historial)
     return historial
 
-def verificar_limite_diario():
-    estado = cargar_json(ESTADO_PATH, {'ultima_publicacion': None, 'contador_hoy': 0, 'fecha': None})
+def verificar_limite():
+    estado = cargar_json(ESTADO_PATH, {'ultima': None, 'hoy': 0, 'fecha': None})
     hoy = datetime.now().strftime('%Y-%m-%d')
     
     if estado.get('fecha') != hoy:
-        estado = {'ultima_publicacion': None, 'contador_hoy': 0, 'fecha': hoy}
+        estado = {'ultima': None, 'hoy': 0, 'fecha': hoy}
     
-    if estado['contador_hoy'] >= MAX_PUBLICACIONES_DIA:
-        log(f"🚫 Límite diario: {MAX_PUBLICACIONES_DIA}", 'advertencia')
+    if estado['hoy'] >= MAX_PUBLICACIONES_DIA:
+        log(f"🚫 Límite diario", 'advertencia')
         return False, estado
     
-    ultima = estado.get('ultima_publicacion')
+    ultima = estado.get('ultima')
     if ultima:
         try:
             ultima_dt = datetime.fromisoformat(ultima)
             minutos = (datetime.now() - ultima_dt).total_seconds() / 60
             if minutos < TIEMPO_ENTRE_PUBLICACIONES:
-                log(f"⏱️ Esperando... {minutos:.0f}min/{TIEMPO_ENTRE_PUBLICACIONES}min", 'info')
+                log(f"⏱️ Esperando {minutos:.0f}min", 'info')
                 return False, estado
         except: pass
     
     return True, estado
 
 # =============================================================================
-# PUBLICACIÓN FACEBOOK (API V22 + MEJOR MANEJO DE ERRORES)
+# FACEBOOK - SOLUCIÓN DEFINITIVA
 # =============================================================================
 
 def publicar_facebook(mensaje, imagen_path):
+    """
+    SOLUCIÓN: Usar Page Access Token con permisos correctos
+    """
     if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
-        log("❌ Faltan credenciales Facebook", 'error')
+        log("❌ Faltan credenciales FB", 'error')
         return False
     
-    # Verificar permisos del token primero
+    # Primero: verificar qué tipo de token tenemos y sus permisos
     try:
-        debug_url = f"https://graph.facebook.com/v22.0/debug_token"
+        # Debug token
+        app_token = f"{FB_PAGE_ID}|{FB_ACCESS_TOKEN}"  # Esto es incorrecto, solo para debug
+        debug_url = "https://graph.facebook.com/v22.0/debug_token"
         debug_params = {
             'input_token': FB_ACCESS_TOKEN,
-            'access_token': f"{FB_PAGE_ID}|{FB_ACCESS_TOKEN}"  # App token format
+            'access_token': FB_ACCESS_TOKEN  # Usar el mismo token para debug
         }
-        debug_resp = requests.get(debug_url, params=debug_params, timeout=10)
-        debug_data = debug_resp.json()
         
-        if 'data' in debug_data:
-            token_data = debug_data['data']
-            if not token_data.get('is_valid'):
-                log(f"❌ Token inválido: {token_data.get('error', {}).get('message', 'Unknown')}", 'error')
-                return False
-            scopes = token_data.get('scopes', [])
-            log(f"🔐 Token válido. Scopes: {scopes}", 'info')
+        resp = requests.get(debug_url, params=debug_params, timeout=10)
+        debug_info = resp.json()
+        
+        if 'data' in debug_info:
+            data = debug_info['data']
+            log(f"🔐 Token válido: {data.get('is_valid', False)}", 'info')
+            log(f"🔐 Tipo: {data.get('type', 'unknown')}", 'info')
+            log(f"🔐 App: {data.get('app_name', 'unknown')}", 'info')
             
-            # Verificar permisos necesarios
-            needed = ['pages_manage_posts', 'pages_read_engagement']
-            missing = [p for p in needed if p not in scopes]
-            if missing:
-                log(f"⚠️ Faltan permisos: {missing}", 'advertencia')
+            scopes = data.get('scopes', [])
+            log(f"🔐 Permisos: {scopes}", 'info')
+            
+            # Verificar si tenemos pages_manage_posts
+            if 'pages_manage_posts' not in scopes:
+                log("❌ FALTA PERMISO: pages_manage_posts", 'error')
+                log("👉 Ve a: https://developers.facebook.com/tools/explorer/", 'advertencia')
+                log("👉 Selecciona tu app y genera token con 'pages_manage_posts'", 'advertencia')
+                return False
+            
+            # Verificar que es un Page Token, no User Token
+            profile_id = data.get('profile_id')
+            if profile_id and profile_id != FB_PAGE_ID:
+                log(f"⚠️ Token es de perfil {profile_id}, no de página {FB_PAGE_ID}", 'advertencia')
+                log("👉 Necesitas un Page Access Token, no User Access Token", 'advertencia')
+                
+                # Intentar obtener Page Token automáticamente
+                log("🔄 Intentando obtener Page Token automáticamente...", 'info')
+                page_token = obtener_page_token(FB_ACCESS_TOKEN, FB_PAGE_ID)
+                if page_token:
+                    log("✅ Page Token obtenido automáticamente", 'exito')
+                    # Reintentar con el nuevo token
+                    return publicar_con_token(mensaje, imagen_path, page_token)
+                else:
+                    return False
+        else:
+            log(f"⚠️ No se pudo verificar token: {debug_info}", 'advertencia')
+            
     except Exception as e:
-        log(f"⚠️ No se pudo verificar token: {e}", 'advertencia')
+        log(f"⚠️ Error verificando token: {e}", 'advertencia')
     
-    # Intentar publicar
+    # Si llegamos aquí, usar el token actual
+    return publicar_con_token(mensaje, imagen_path, FB_ACCESS_TOKEN)
+
+def obtener_page_token(user_token, page_id):
+    """Intenta obtener el Page Access Token desde el User Token"""
     try:
-        # Método 1: Publicación con foto (requiere pages_manage_posts)
+        url = f"https://graph.facebook.com/v22.0/{page_id}"
+        params = {
+            'fields': 'access_token',
+            'access_token': user_token
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+        
+        if 'access_token' in data:
+            return data['access_token']
+        
+        error = data.get('error', {})
+        log(f"❌ No se pudo obtener Page Token: {error.get('message', 'Unknown')}", 'error')
+        return None
+        
+    except Exception as e:
+        log(f"❌ Error obteniendo Page Token: {e}", 'error')
+        return None
+
+def publicar_con_token(mensaje, imagen_path, token):
+    """Publicar con un token específico"""
+    try:
         url = f"https://graph.facebook.com/v22.0/{FB_PAGE_ID}/photos"
         
-        with open(imagen_path, 'rb') as img_file:
-            files = {'file': ('anime.jpg', img_file, 'image/jpeg')}
+        with open(imagen_path, 'rb') as img:
+            files = {'file': ('anime.jpg', img, 'image/jpeg')}
             data = {
                 'message': mensaje[:2000],
-                'access_token': FB_ACCESS_TOKEN,
+                'access_token': token,
                 'published': 'true'
             }
             
-            response = requests.post(url, files=files, data=data, timeout=60)
-            result = response.json()
+            resp = requests.post(url, files=files, data=data, timeout=60)
+            result = resp.json()
         
         if 'id' in result or 'post_id' in result:
             post_id = result.get('post_id', result.get('id'))
             log(f"✅ Publicado: {post_id}", 'exito')
             return True
         
-        # Si falla, intentar como feed post sin imagen
         error = result.get('error', {})
-        error_code = error.get('code')
-        error_msg = error.get('message', 'Unknown error')
+        code = error.get('code')
+        msg = error.get('message', 'Unknown')
         
-        log(f"❌ Error Facebook ({error_code}): {error_msg}", 'error')
+        log(f"❌ Error FB ({code}): {msg}", 'error')
         
-        # Si es error de permisos, intentar publicar solo texto
-        if error_code == 200 or 'Permissions' in error_msg:
-            log("🔄 Intentando publicar solo texto...", 'advertencia')
-            return publicar_facebook_solo_texto(mensaje)
+        # Si es error 200, intentar solo texto
+        if code == 200:
+            return publicar_solo_texto(mensaje, token)
         
         return False
-            
+        
     except Exception as e:
         log(f"❌ Excepción: {e}", 'error')
         return False
 
-def publicar_facebook_solo_texto(mensaje):
-    """Fallback: publicar solo texto si las fotos fallan por permisos"""
+def publicar_solo_texto(mensaje, token):
+    """Fallback: publicar solo texto"""
     try:
         url = f"https://graph.facebook.com/v22.0/{FB_PAGE_ID}/feed"
         data = {
             'message': mensaje[:2000],
-            'access_token': FB_ACCESS_TOKEN,
-            'link': 'https://nuevo-anime.com'  # Link para preview
+            'access_token': token,
+            'link': 'https://anime.news'
         }
         
-        response = requests.post(url, data=data, timeout=30)
-        result = response.json()
+        resp = requests.post(url, data=data, timeout=30)
+        result = resp.json()
         
         if 'id' in result:
-            log(f"✅ Publicado (solo texto): {result['id']}", 'exito')
+            log(f"✅ Publicado (texto): {result['id']}", 'exito')
             return True
         else:
             error = result.get('error', {})
-            log(f"❌ Error texto ({error.get('code')}): {error.get('message')}", 'error')
+            log(f"❌ Error texto: {error.get('message', 'Unknown')}", 'error')
             return False
     except Exception as e:
         log(f"❌ Error texto: {e}", 'error')
         return False
 
 # =============================================================================
-# FUNCIÓN PRINCIPAL
+# MAIN
 # =============================================================================
 
 def main():
     print("\n" + "="*70)
-    print("🇯🇵 BOT ANIME V2.1 - Gemini 2.0 + Facebook API v22")
+    print("🇯🇵 BOT ANIME V2.2 - OpenRouter + Facebook API v22")
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"🤖 Gemini: {'✅' if model else '❌'} | FB: {'✅' if FB_ACCESS_TOKEN else '❌'}")
+    print(f"🤖 IA: {AI_SERVICE or 'Manual'} | FB: {'✅' if FB_ACCESS_TOKEN else '❌'}")
     print("="*70)
     
-    puede_publicar, estado = verificar_limite_diario()
-    if not puede_publicar:
+    puede, estado = verificar_limite()
+    if not puede:
         return False
     
     historial = cargar_historial()
-    log(f"📊 Hoy: {estado.get('contador_hoy', 0)}/{MAX_PUBLICACIONES_DIA}", 'info')
+    log(f"📊 Hoy: {estado.get('hoy', 0)}/{MAX_PUBLICACIONES_DIA}", 'info')
     
     log("🔍 Buscando noticias...", 'info')
-    noticias = obtener_rss_anime()
-    
+    noticias = obtener_noticias()
     if not noticias:
         log("❌ Sin noticias", 'error')
         return False
     
-    noticias_unicas = [n for n in noticias if not es_contenido_repetido(n['titulo'], n['descripcion'], historial)]
-    log(f"🎯 Únicas: {len(noticias_unicas)}", 'info')
-    
-    if not noticias_unicas:
+    unicas = [n for n in noticias if not es_repetido(n['titulo'], historial)]
+    log(f"🎯 Únicas: {len(unicas)}", 'info')
+    if not unicas:
         log("⚠️ Todo publicado", 'advertencia')
         return False
     
-    noticias_unicas.sort(key=lambda x: x['puntaje'], reverse=True)
+    unicas.sort(key=lambda x: x['puntaje'], reverse=True)
     
     seleccionada = None
     mensaje_final = None
-    imagen_final = None
+    imagen_url = None
     
-    for noticia in noticias_unicas[:10]:
-        contenido, imagen_web = extraer_contenido_web(noticia['url'])
-        texto_base = contenido if (contenido and len(contenido) >= 100) else noticia['descripcion']
+    for noticia in unicas[:8]:
+        contenido, img_web = extraer_web(noticia['url'])
+        texto = contenido if (contenido and len(contenido) >= 80) else noticia['descripcion']
         
-        if len(texto_base) >= 80:
+        if len(texto) >= 60:
             seleccionada = noticia
-            imagen_final = noticia.get('imagen') or imagen_web
+            imagen_url = noticia.get('imagen') or img_web
             
-            log(f"✍️ Generando texto ({'Gemini' if model else 'manual'})...", 'info')
+            # Generar texto
+            log(f"✍️ Generando ({AI_SERVICE or 'manual'})...", 'info')
             
-            if model:
-                mensaje_gemini = redactar_con_gemini(noticia['titulo'], texto_base, noticia['tipo'])
-                mensaje_final = mensaje_gemini if mensaje_gemini else generar_texto_manual(noticia['titulo'], texto_base, noticia['tipo'], noticia['fuente'])
+            texto_ia = redactar_con_ia(noticia['titulo'], texto, noticia['tipo'])
+            if texto_ia:
+                mensaje_final = texto_ia
+                log("✅ Texto generado por IA", 'exito')
             else:
-                mensaje_final = generar_texto_manual(noticia['titulo'], texto_base, noticia['tipo'], noticia['fuente'])
+                mensaje_final = redactar_manual_mejorado(noticia['titulo'], texto, noticia['tipo'], noticia['fuente'])
+                log("✅ Texto manual", 'info')
             break
     
     if not seleccionada or not mensaje_final:
         log("❌ No procesable", 'error')
         return False
     
-    print(f"\n📝 {seleccionada['titulo'][:60]}... | {seleccionada['tipo']} | {seleccionada['puntaje']}pts")
+    print(f"\n📝 {seleccionada['titulo'][:55]}... | {seleccionada['tipo']} | {seleccionada['puntaje']}pts")
     
-    log("🖼️ Imagen...", 'info')
-    imagen_path = descargar_imagen(imagen_final) if imagen_final else None
-    if not imagen_path:
-        imagen_path = crear_imagen_default(seleccionada['titulo'])
+    # Imagen
+    log("🖼️ Procesando imagen...", 'info')
+    img_path = descargar_imagen(imagen_url) if imagen_url else None
+    if not img_path:
+        img_path = crear_imagen_default(seleccionada['titulo'])
     
-    if not imagen_path:
+    if not img_path:
         log("❌ Sin imagen", 'error')
         return False
     
-    log("📘 Publicando...", 'info')
-    exito = publicar_facebook(mensaje_final, imagen_path)
+    # Publicar
+    log("📘 Publicando en FB...", 'info')
+    exito = publicar_facebook(mensaje_final, img_path)
     
     try:
-        if os.path.exists(imagen_path): os.remove(imagen_path)
+        if os.path.exists(img_path): os.remove(img_path)
     except: pass
     
     if exito:
-        historial = guardar_historial(historial, seleccionada['url'], seleccionada['titulo'], texto_base)
-        estado['ultima_publicacion'] = datetime.now().isoformat()
-        estado['contador_hoy'] = estado.get('contador_hoy', 0) + 1
+        historial = guardar_historial(historial, seleccionada['url'], seleccionada['titulo'])
+        estado['ultima'] = datetime.now().isoformat()
+        estado['hoy'] = estado.get('hoy', 0) + 1
         guardar_json(ESTADO_PATH, estado)
-        log(f"✅ Total: {historial['estadisticas']['total_publicadas']}", 'exito')
+        log(f"✅ Total histórico: {historial['estadisticas']['total']}", 'exito')
         return True
     else:
-        log("❌ Falló", 'error')
+        log("❌ Falló publicación", 'error')
         return False
 
 if __name__ == "__main__":
