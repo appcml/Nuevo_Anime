@@ -1,11 +1,7 @@
-# Crear la versión final con el nombre exacto: "Bot Anime V3.py"
-# Usar la versión mínima que funciona seguro, pero con las mejoras anti-duplicado
-
-codigo_final = '''#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Bot Anime V3 - Sistema Anti-Duplicado + Contenido Variado
-Nombre de archivo: Bot Anime V3.py
 """
 
 import requests
@@ -132,22 +128,22 @@ def guardar_json(ruta, datos):
 
 def generar_hash(texto):
     if not texto: return ""
-    t = re.sub(r'[^\\w\\s]', '', texto.lower().strip())
-    return hashlib.md5(re.sub(r'\\s+', ' ', t).encode()).hexdigest()
+    t = re.sub(r'[^\w\s]', '', texto.lower().strip())
+    return hashlib.md5(re.sub(r'\s+', ' ', t).encode()).hexdigest()
 
 def normalizar_url(url):
     if not url: return ""
     try:
         parsed = urlparse(url)
-        netloc = re.sub(r'^(www\\.|m\\.)', '', parsed.netloc.lower())
-        path = re.sub(r'/index\\.html?$', '/', parsed.path.lower().rstrip('/'))
+        netloc = re.sub(r'^(www\.|m\.)', '', parsed.netloc.lower())
+        path = re.sub(r'/index\.html?$', '/', parsed.path.lower().rstrip('/'))
         path = re.sub(r'[?&](utm_|ref|source|campaign).*', '', path)
         return f"{netloc}{path}"
     except: return url.lower().strip()
 
 def calcular_similitud(t1, t2):
     if not t1 or not t2: return 0.0
-    def n(t): return re.sub(r'[^\\w\\s]', '', t.lower().strip())
+    def n(t): return re.sub(r'[^\w\s]', '', t.lower().strip())
     return SequenceMatcher(None, n(t1), n(t2)).ratio()
 
 def limpiar_texto(texto):
@@ -155,7 +151,7 @@ def limpiar_texto(texto):
     import html
     t = html.unescape(texto)
     t = re.sub(r'<[^>]+>', ' ', t)
-    t = re.sub(r'\\s+', ' ', t)
+    t = re.sub(r'\s+', ' ', t)
     return t.strip()
 
 def extraer_dominio(url):
@@ -188,38 +184,38 @@ class AntiDuplicado:
         self.cache_urls = set(historial.get('urls_normalizadas', []))
         self.cache_titulos = deque(historial.get('titulos', [])[-50:], maxlen=50)
         self.cache_fingerprints = set(historial.get('fingerprints', []))
-    
+
     def generar_fingerprint(self, titulo, contenido):
         texto = f"{titulo} {contenido}".lower()
-        texto = re.sub(r'[^\\w\\s]', '', texto)
+        texto = re.sub(r'[^\w\s]', '', texto)
         palabras = sorted(set(texto.split()))
         return hashlib.sha256(' '.join(palabras[:20]).encode()).hexdigest()[:16]
-    
+
     def es_duplicado(self, titulo, url, contenido=""):
         url_norm = normalizar_url(url)
         if url_norm in self.cache_urls:
             log(f"🔴 Duplicado por URL: {url_norm[:60]}...", 'debug')
             return True
-        
+
         hash_titulo = generar_hash(titulo)
         if hash_titulo in self.cache_hashes:
             log(f"🔴 Duplicado por hash exacto", 'debug')
             return True
-        
+
         if contenido:
             fp = self.generar_fingerprint(titulo, contenido)
             if fp in self.cache_fingerprints:
                 log(f"🔴 Duplicado por fingerprint", 'debug')
                 return True
-        
+
         for titulo_previo in self.cache_titulos:
             similitud = calcular_similitud(titulo, titulo_previo)
             if similitud >= UMBRAL_SIMILITUD_TITULO:
                 log(f"🔴 Duplicado por similitud ({similitud:.2f})", 'debug')
                 return True
-        
+
         return False
-    
+
     def registrar(self, titulo, url, contenido=""):
         self.cache_hashes.add(generar_hash(titulo))
         self.cache_urls.add(normalizar_url(url))
@@ -237,35 +233,35 @@ def obtener_personaje_jikan():
         search_url = f"https://api.jikan.moe/v4/anime?q={quote(anime)}&limit=1"
         resp = requests.get(search_url, timeout=10)
         if resp.status_code != 200: return None
-        
+
         data = resp.json()
         if not data.get('data'): return None
-        
+
         anime_id = data['data'][0]['mal_id']
         anime_title = data['data'][0]['title']
-        
+
         chars_url = f"https://api.jikan.moe/v4/anime/{anime_id}/characters"
         resp = requests.get(chars_url, timeout=10)
         if resp.status_code != 200: return None
-        
+
         chars_data = resp.json()
         if not chars_data.get('data'): return None
-        
+
         personajes = [c for c in chars_data['data'] if c.get('role') in ['Main', 'Supporting']]
         if not personajes: personajes = chars_data['data']
-        
+
         personaje = random.choice(personajes[:10])
         char_info = personaje['character']
-        
+
         char_id = char_info['mal_id']
         detail_url = f"https://api.jikan.moe/v4/characters/{char_id}/full"
         resp = requests.get(detail_url, timeout=10)
-        
+
         bio = ""
         if resp.status_code == 200:
             detail_data = resp.json()
             bio = detail_data.get('data', {}).get('about', '')[:500]
-        
+
         return {
             'titulo': f"{char_info['name']} de {anime_title}",
             'descripcion': bio or f"Personaje de {anime_title}",
@@ -305,29 +301,29 @@ def obtener_curiosidad_anilist():
             }
         }
         """
-        
+
         variables = {"page": random.randint(1, 10), "perPage": 10}
-        
+
         resp = requests.post(
             "https://graphql.anilist.co",
             json={"query": query, "variables": variables},
             timeout=10
         )
-        
+
         if resp.status_code != 200: return None
-        
+
         data = resp.json()
         medias = data.get('data', {}).get('Page', {}).get('media', [])
         if not medias: return None
-        
+
         anime = random.choice(medias)
         titulo = anime['title']['romaji'] or anime['title']['english'] or anime['title']['native']
-        
+
         desc = anime.get('description', '')[:400]
         studio = anime.get('studios', {}).get('nodes', [{}])[0].get('name', 'Estudio desconocido')
-        
+
         curiosidad = f"{titulo} - {desc} Este anime tiene una puntuación de {anime.get('averageScore', 'N/A')}/100 y fue producido por {studio}."
-        
+
         return {
             'titulo': f"Curiosidad: {titulo}",
             'descripcion': curiosidad,
@@ -350,17 +346,17 @@ def obtener_curiosidad_anilist():
 def obtener_databook_info():
     try:
         anime = random.choice(["One Piece", "Naruto", "Bleach", "Fairy Tail", "Gintama"])
-        
+
         search_url = f"https://api.jikan.moe/v4/anime?q={quote(anime)}&limit=1"
         resp = requests.get(search_url, timeout=10)
         if resp.status_code != 200: return None
-        
+
         data = resp.json()
         if not data.get('data'): return None
-        
+
         anime_data = data['data'][0]
         anime_id = anime_data['mal_id']
-        
+
         stats_url = f"https://api.jikan.moe/v4/anime/{anime_id}/statistics"
         resp = requests.get(stats_url, timeout=10)
         stats = {}
@@ -371,23 +367,23 @@ def obtener_databook_info():
                 'viendo': stats_data.get('watching', 0),
                 'puntuacion': stats_data.get('score', 0)
             }
-        
+
         staff_url = f"https://api.jikan.moe/v4/anime/{anime_id}/staff"
         resp = requests.get(staff_url, timeout=10)
         staff_names = []
         if resp.status_code == 200:
             staff_data = resp.json().get('data', [])
             staff_names = [s['person']['name'] for s in staff_data[:3]]
-        
+
         titulo = anime_data['title']
         sinopsis = anime_data.get('synopsis', '')[:300]
-        
+
         descripcion = f"Databook de {titulo}. {sinopsis} "
         if stats:
             descripcion += f"Estadísticas MAL: {stats.get('completado', 0):,} usuarios completaron la serie. "
         if staff_names:
             descripcion += f"Staff clave: {', '.join(staff_names)}."
-        
+
         return {
             'titulo': f"📚 Databook: {titulo}",
             'descripcion': descripcion,
@@ -409,7 +405,7 @@ def obtener_databook_info():
 
 def obtener_noticias_newsapi():
     if not NEWS_API_KEY: return []
-    
+
     try:
         url = "https://newsapi.org/v2/everything"
         params = {
@@ -419,18 +415,18 @@ def obtener_noticias_newsapi():
             'pageSize': 10,
             'apiKey': NEWS_API_KEY
         }
-        
+
         resp = requests.get(url, params=params, timeout=15)
         if resp.status_code != 200: return []
-        
+
         data = resp.json()
         articulos = data.get('articles', [])
-        
+
         noticias = []
         for art in articulos:
             titulo = art.get('title', '').strip()
             if not titulo or '[Removed]' in titulo: continue
-            
+
             noticias.append({
                 'titulo': limpiar_texto(titulo),
                 'descripcion': limpiar_texto(art.get('description', '')),
@@ -441,7 +437,7 @@ def obtener_noticias_newsapi():
                 'puntaje': 50,
                 'metadata': {}
             })
-        
+
         return noticias
     except Exception as e:
         log(f"Error NewsAPI: {e}", 'debug')
@@ -450,22 +446,22 @@ def obtener_noticias_newsapi():
 def obtener_noticias_rss(tipo="noticia"):
     feeds = RSS_FEEDS.get(tipo, RSS_FEEDS["noticia"])
     noticias = []
-    
+
     for feed_url in feeds:
         try:
             log(f"📡 RSS [{tipo}]: {feed_url[:45]}...", 'debug')
             feed = feedparser.parse(feed_url, request_headers={'User-Agent': 'Mozilla/5.0'})
             if not feed or not feed.entries: continue
-            
+
             for entry in feed.entries[:3]:
                 titulo = entry.get('title', '').strip()
                 if not titulo or '[Removed]' in titulo: continue
-                
+
                 link = entry.get('link', '')
                 if not link: continue
-                
+
                 desc = limpiar_texto(entry.get('summary', '') or entry.get('description', ''))
-                
+
                 imagen = None
                 if 'media_content' in entry:
                     imagen = entry.media_content[0].get('url')
@@ -474,10 +470,10 @@ def obtener_noticias_rss(tipo="noticia"):
                         if l.get('type', '').startswith('image/'):
                             imagen = l.get('href')
                             break
-                
+
                 tipo_detectado = detectar_tipo(titulo, desc)
                 tipo_final = tipo if (tipo == "estreno" or tipo_detectado == "estreno") else tipo
-                
+
                 noticias.append({
                     'titulo': limpiar_texto(titulo),
                     'descripcion': desc,
@@ -491,7 +487,7 @@ def obtener_noticias_rss(tipo="noticia"):
         except Exception as e:
             log(f"Error RSS: {e}", 'debug')
             continue
-    
+
     return noticias
 
 # =============================================================================
@@ -504,8 +500,6 @@ def truncar_texto(texto, max_chars=MAX_CARACTERES_FB):
     return texto[:max_chars].rsplit(' ', 1)[0] + "..."
 
 def redactar_manual(titulo, contenido, tipo="noticia", fuente="", metadata=None):
-    """Redacción manual que SIEMPRE funciona sin verificación estricta"""
-    
     hooks = {
         "personaje": ["🎭 ¡Personaje destacado!", "✨ ¡Conoce a...!", "🔥 ¡Protagonista épico!"],
         "databook": ["📚 ¡Datos oficiales!", "📖 ¡Información confirmada!", "🔍 ¡Detalles revelados!"],
@@ -513,7 +507,7 @@ def redactar_manual(titulo, contenido, tipo="noticia", fuente="", metadata=None)
         "estreno": ["🚨 ¡Fechas confirmadas!", "🎉 ¡Estreno anunciado!", "✨ ¡Llega pronto!"],
         "noticia": ["📢 ¡Última hora!", "🔥 ¡Noticia bomba!", "🎌 ¡Anuncio oficial!"]
     }
-    
+
     ctas = {
         "personaje": ["¿Su personaje favorito? ¡Opinen! 👇", "¿Qué les parece? 👇"],
         "databook": ["¿Qué dato les sorprendió? 👇", "¿Ya sabían esto? 👇"],
@@ -521,15 +515,13 @@ def redactar_manual(titulo, contenido, tipo="noticia", fuente="", metadata=None)
         "estreno": ["¿Lo esperan? 👇", "¿Emocionados? 👇"],
         "noticia": ["¿Qué opinan? 👇", "¿Impactados? 👇"]
     }
-    
+
     hook = random.choice(hooks.get(tipo, hooks["noticia"]))
     cta = random.choice(ctas.get(tipo, ctas["noticia"]))
-    
-    # Procesar contenido
+
     oraciones = [s.strip() for s in re.split(r'[.!?]+', contenido) if len(s.strip()) > 20][:4]
     resumen = ". ".join(oraciones) + "." if oraciones else contenido[:250] + "..."
-    
-    # Añadir metadata si existe
+
     extra_info = ""
     if metadata:
         if tipo == "personaje" and metadata.get('rol'):
@@ -538,9 +530,9 @@ def redactar_manual(titulo, contenido, tipo="noticia", fuente="", metadata=None)
             extra_info = f" Episodios: {metadata['episodios']}."
         elif tipo == "curiosidad" and metadata.get('score'):
             extra_info = f" Puntuación: {metadata['score']}/100."
-    
+
     titulo_limpio = titulo[:70] if len(titulo) > 70 else titulo
-    
+
     hashtags_map = {
         "personaje": "#Anime #Personajes #OtakuLife",
         "databook": "#Anime #Databook #OtakuFacts",
@@ -549,7 +541,7 @@ def redactar_manual(titulo, contenido, tipo="noticia", fuente="", metadata=None)
         "noticia": "#Anime #Noticias #Otaku"
     }
     hashtags = hashtags_map.get(tipo, "#Anime #Noticias #Otaku")
-    
+
     lineas = [
         hook,
         "",
@@ -561,12 +553,10 @@ def redactar_manual(titulo, contenido, tipo="noticia", fuente="", metadata=None)
         "",
         hashtags
     ]
-    
-    return truncar_texto("\\n".join(lineas), MAX_CARACTERES_FB)
+
+    return truncar_texto("\n".join(lineas), MAX_CARACTERES_FB)
 
 def redactar_con_ia(titulo, contenido, tipo="noticia", metadata=None):
-    """Intenta usar IA, pero si falla retorna None para usar manual"""
-    
     prompt = f"""Crea una publicación de Facebook sobre anime en ESPAÑOL LATINO (tú, no usted).
 
 TÍTULO: {titulo}
@@ -608,18 +598,17 @@ Máximo 1500 caracteres."""
                 data = resp.json()
                 if 'choices' in data and len(data['choices']) > 0:
                     texto = data['choices'][0]['message']['content'].strip()
-                    # Verificación simple: debe tener ñ o acentos o palabras comunes
                     if any(c in texto.lower() for c in 'ñáéíóú') or len(texto) > 100:
                         return truncar_texto(texto, 1600)
         except Exception as e:
             log(f"Error OpenRouter: {e}", 'debug')
-    
+
     if AI_SERVICE == "gemini":
         try:
             from google import genai
             from google.genai import types
             client = genai.Client(api_key=GEMINI_API_KEY)
-            
+
             response = client.models.generate_content(
                 model="gemini-2.0-flash",
                 contents=prompt,
@@ -631,7 +620,7 @@ Máximo 1500 caracteres."""
                     return truncar_texto(texto, 1600)
         except Exception as e:
             log(f"Error Gemini: {e}", 'debug')
-    
+
     return None
 
 # =============================================================================
@@ -644,9 +633,9 @@ def extraer_web(url):
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         r = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(r.content, 'html.parser')
-        
+
         for elem in soup(['script', 'style', 'nav', 'header', 'footer']): elem.decompose()
-        
+
         content = None
         for selector in ['article', '.entry-content', '.post-content', 'main', '.content']:
             elem = soup.select_one(selector)
@@ -656,14 +645,14 @@ def extraer_web(url):
                 if len(text) > 100:
                     content = text[:1200]
                     break
-        
+
         imagen = None
         for meta in ['og:image', 'twitter:image']:
             tag = soup.find('meta', property=meta) or soup.find('meta', attrs={'name': meta})
             if tag and tag.get('content'):
                 imagen = tag['content'].strip()
                 break
-        
+
         return content, imagen
     except Exception as e:
         log(f"Error extrayendo web: {e}", 'debug')
@@ -673,24 +662,24 @@ def descargar_imagen(url):
     if not url: return None
     for bad in ['google.com', 'gstatic.com', 'facebook.com', 'logo', 'icon', 'favicon']:
         if bad in url.lower(): return None
-    
+
     try:
         from PIL import Image
         from io import BytesIO
-        
+
         r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=20, stream=True)
         if 'image' not in r.headers.get('content-type', ''): return None
-        
+
         img = Image.open(BytesIO(r.content))
         w, h = img.size
         if w < 400 or h < 300 or w/h > 3 or h/w > 3: return None
-        
+
         if img.mode in ('RGBA', 'P'): img = img.convert('RGB')
         img.thumbnail((1200, 1200))
-        
+
         path = f'/tmp/anime_{generar_hash(url)[:8]}.jpg'
         img.save(path, 'JPEG', quality=85)
-        
+
         if os.path.getsize(path) < 10000:
             os.remove(path)
             return None
@@ -703,7 +692,7 @@ def crear_imagen_default(titulo, tipo="noticia"):
     try:
         from PIL import Image, ImageDraw, ImageFont
         import textwrap
-        
+
         colores = {
             "personaje": ("#1a1a2e", "#e94560"),
             "databook": ("#16213e", "#e94560"),
@@ -711,24 +700,24 @@ def crear_imagen_default(titulo, tipo="noticia"):
             "estreno": ("#1a1a2e", "#f39c12"),
             "noticia": ("#0f0f23", "#ff006e")
         }
-        
+
         bg_color, accent = colores.get(tipo, colores["noticia"])
-        
+
         img = Image.new('RGB', (1200, 630), color=bg_color)
         draw = ImageDraw.Draw(img)
-        
+
         draw.rectangle([(0, 0), (1200, 8)], fill=accent)
         draw.rectangle([(0, 622), (1200, 630)], fill=accent)
-        
+
         emojis = {"personaje": "🎭", "databook": "📚", "curiosidad": "💡", "estreno": "🚨", "noticia": "📢"}
         emoji = emojis.get(tipo, "🎌")
-        
+
         fonts_to_try = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
             "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
         ]
-        
+
         font_title = font_sub = None
         for font_path in fonts_to_try:
             try:
@@ -737,20 +726,20 @@ def crear_imagen_default(titulo, tipo="noticia"):
                     font_sub = ImageFont.truetype(font_path, 26)
                     break
             except: continue
-        
+
         if not font_title:
             font_title = font_sub = ImageFont.load_default()
-        
+
         wrapped = textwrap.fill(titulo[:70], width=30)
-        lines = wrapped.split('\\n')
+        lines = wrapped.split('\n')
         y_start = (630 - len(lines) * 55) // 2 - 10
-        
+
         for i, line in enumerate(lines):
             draw.text((60, y_start + i * 55), line, font=font_title, fill='#ffffff')
-        
+
         draw.text((60, 550), f"{emoji} {tipo.upper()} | Anime Inteligente", font=font_sub, fill=accent)
         draw.text((60, 590), "🎌 Contenido variado para otakus", font=font_sub, fill='#a0a0a0')
-        
+
         path = f'/tmp/anime_{tipo}_{generar_hash(titulo)[:8]}.jpg'
         img.save(path, 'JPEG', quality=90)
         return path
@@ -781,7 +770,7 @@ def cargar_historial():
 def guardar_historial(historial, url, titulo, tipo, contenido=""):
     anti_dup = AntiDuplicado(historial)
     anti_dup.registrar(titulo, url, contenido)
-    
+
     historial['urls'] = list(anti_dup.cache_urls)[-200:]
     historial['urls_normalizadas'] = list(anti_dup.cache_urls)[-200:]
     historial['hashes_titulos'] = list(anti_dup.cache_hashes)[-200:]
@@ -789,29 +778,29 @@ def guardar_historial(historial, url, titulo, tipo, contenido=""):
     historial['titulos'] = list(anti_dup.cache_titulos)
     historial['timestamps'].append(datetime.now().isoformat())
     historial['timestamps'] = historial['timestamps'][-200:]
-    
+
     if tipo not in historial['tipos_publicados']:
         historial['tipos_publicados'][tipo] = 0
     historial['tipos_publicados'][tipo] += 1
-    
+
     historial['estadisticas']['total'] += 1
     historial['estadisticas']['hoy'] += 1
     historial['estadisticas']['fecha'] = datetime.now().strftime('%Y-%m-%d')
-    
+
     guardar_json(HISTORIAL_PATH, historial)
     return historial
 
 def verificar_limite():
     estado = cargar_json(ESTADO_PATH, {'ultima': None, 'hoy': 0, 'fecha': None, 'tipo_ultimo': None})
     hoy = datetime.now().strftime('%Y-%m-%d')
-    
+
     if estado.get('fecha') != hoy:
         estado = {'ultima': None, 'hoy': 0, 'fecha': hoy, 'tipo_ultimo': None}
-    
+
     if estado['hoy'] >= MAX_PUBLICACIONES_DIA:
         log(f"🚫 Límite diario alcanzado ({MAX_PUBLICACIONES_DIA})", 'advertencia')
         return False, estado
-    
+
     ultima = estado.get('ultima')
     if ultima:
         try:
@@ -821,22 +810,22 @@ def verificar_limite():
                 log(f"⏱️ Esperando {TIEMPO_ENTRE_PUBLICACIONES - minutos:.0f}min más", 'info')
                 return False, estado
         except: pass
-    
+
     return True, estado
 
 def seleccionar_tipo(historial):
     tipos_count = historial.get('tipos_publicados', {})
     total = sum(tipos_count.values()) if tipos_count else 0
-    
+
     if total == 0:
         return random.choice(TIPOS_CONTENIDO)
-    
+
     scores = {}
     for tipo in TIPOS_CONTENIDO:
         actual = tipos_count.get(tipo, 0)
         esperado = total * PESOS_TIPO.get(tipo, 0.2)
         scores[tipo] = esperado - actual
-    
+
     if random.random() < 0.7:
         return max(scores, key=scores.get)
     else:
@@ -850,19 +839,19 @@ def publicar_facebook(mensaje, imagen_path):
     if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
         log("❌ Faltan credenciales FB", 'error')
         return False
-    
+
     mensaje_seguro = truncar_texto(mensaje, MAX_CARACTERES_FB)
     log(f"📝 Caracteres: {len(mensaje_seguro)}/{MAX_CARACTERES_FB}", 'info')
-    
+
     try:
         url = f"https://graph.facebook.com/v22.0/{FB_PAGE_ID}/photos"
-        
+
         if os.path.getsize(imagen_path) > 10 * 1024 * 1024:
             from PIL import Image
             img = Image.open(imagen_path)
             img.thumbnail((800, 800))
             img.save(imagen_path, 'JPEG', quality=70, optimize=True)
-        
+
         with open(imagen_path, 'rb') as img:
             files = {'file': ('anime.jpg', img, 'image/jpeg')}
             data = {
@@ -870,19 +859,19 @@ def publicar_facebook(mensaje, imagen_path):
                 'access_token': FB_ACCESS_TOKEN,
                 'published': 'true'
             }
-            
+
             resp = requests.post(url, files=files, data=data, timeout=60)
             result = resp.json()
-        
+
         if 'id' in result or 'post_id' in result:
             post_id = result.get('post_id', result.get('id'))
             log(f"✅ Publicado: {post_id}", 'exito')
             return True
-        
+
         error = result.get('error', {})
         log(f"❌ Error FB ({error.get('code')}): {error.get('message', 'Unknown')}", 'error')
         return False
-        
+
     except Exception as e:
         log(f"❌ Excepción: {e}", 'error')
         return False
@@ -894,9 +883,9 @@ def publicar_facebook(mensaje, imagen_path):
 def obtener_contenido_por_tipo(tipo, historial):
     anti_dup = AntiDuplicado(historial)
     candidatos = []
-    
+
     log(f"🔍 Buscando contenido tipo: {tipo}", 'info')
-    
+
     if tipo == "personaje":
         for _ in range(3):
             data = obtener_personaje_jikan()
@@ -904,53 +893,53 @@ def obtener_contenido_por_tipo(tipo, historial):
                 candidatos.append(data)
                 break
             time.sleep(1)
-    
+
     elif tipo == "curiosidad":
         data = obtener_curiosidad_anilist()
         if data and not anti_dup.es_duplicado(data['titulo'], data['url'], data['descripcion']):
             candidatos.append(data)
-    
+
     elif tipo == "databook":
         data = obtener_databook_info()
         if data and not anti_dup.es_duplicado(data['titulo'], data['url'], data['descripcion']):
             candidatos.append(data)
-    
+
     elif tipo in ["noticia", "estreno"]:
         noticias = obtener_noticias_rss(tipo)
         noticias.extend(obtener_noticias_newsapi())
-        
+
         for n in noticias:
             if not anti_dup.es_duplicado(n['titulo'], n['url'], n['descripcion']):
                 candidatos.append(n)
-        
+
         candidatos.sort(key=lambda x: x['puntaje'], reverse=True)
-    
+
     return candidatos[:5]
 
 def main():
-    print("\\n" + "="*70)
+    print("\n" + "="*70)
     print("🇯🇵 BOT ANIME V3.0 - Anti-Duplicado + Contenido Variado")
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"🤖 IA: {AI_SERVICE or 'Manual'} | FB: {'✅' if FB_ACCESS_TOKEN else '❌'}")
     print("="*70)
-    
+
     puede, estado = verificar_limite()
     if not puede:
         return False
-    
+
     historial = cargar_historial()
     log(f"📊 Hoy: {estado.get('hoy', 0)}/{MAX_PUBLICACIONES_DIA}", 'info')
-    
+
     tipos_count = historial.get('tipos_publicados', {})
     if tipos_count:
         distribucion = " | ".join([f"{k}:{v}" for k, v in sorted(tipos_count.items())])
         log(f"📈 Distribución: {distribucion}", 'info')
-    
+
     tipo_objetivo = seleccionar_tipo(historial)
     log(f"🎯 Tipo seleccionado: {tipo_objetivo}", 'info')
-    
+
     candidatos = obtener_contenido_por_tipo(tipo_objetivo, historial)
-    
+
     if not candidatos:
         log(f"⚠️ Sin candidatos para {tipo_objetivo}, probando otros tipos...", 'advertencia')
         for alt_tipo in [t for t in TIPOS_CONTENIDO if t != tipo_objetivo]:
@@ -959,31 +948,29 @@ def main():
                 tipo_objetivo = alt_tipo
                 log(f"✅ Usando tipo alternativo: {tipo_objetivo}", 'info')
                 break
-    
+
     if not candidatos:
         log("❌ Sin contenido disponible", 'error')
         return False
-    
+
     seleccionada = None
     mensaje_final = None
-    
+
     for candidato in candidatos:
         log(f"✍️ Generando texto ({AI_SERVICE or 'manual'})...", 'info')
-        
+
         contenido_extra = candidato['descripcion']
         if candidato.get('url') and candidato['fuente'] not in ['MyAnimeList (Jikan)', 'AniList', 'MyAnimeList Databook']:
             web_content, _ = extraer_web(candidato['url'])
             if web_content and len(web_content) > 50:
                 contenido_extra = web_content
-        
-        # Intentar IA primero
+
         texto_ia = redactar_con_ia(candidato['titulo'], contenido_extra, candidato['tipo'], candidato.get('metadata'))
-        
+
         if texto_ia:
             mensaje_final = texto_ia
             log("✅ Texto IA generado", 'exito')
         else:
-            # Fallback a manual (siempre funciona)
             mensaje_final = redactar_manual(
                 candidato['titulo'],
                 contenido_extra,
@@ -992,42 +979,41 @@ def main():
                 candidato.get('metadata')
             )
             log("✅ Texto manual generado", 'info')
-        
-        # Validación simple: debe tener contenido y longitud razonable
+
         if mensaje_final and len(mensaje_final) > 50:
             seleccionada = candidato
             break
         else:
             log("⚠️ Texto inválido, probando siguiente candidato", 'advertencia')
-    
+
     if not seleccionada or not mensaje_final:
         log("❌ No se pudo generar contenido válido", 'error')
         return False
-    
+
     mensaje_final = truncar_texto(mensaje_final, MAX_CARACTERES_FB)
-    
-    print(f"\\n{'='*60}")
+
+    print(f"\n{'='*60}")
     print(f"📱 PREVIEW ({seleccionada['tipo'].upper()}):")
     print(f"{'='*60}")
     print(mensaje_final)
     print(f"{'='*60}")
     print(f"📊 {len(mensaje_final)} chars | Fuente: {seleccionada['fuente']}")
-    
+
     log("🖼️ Procesando imagen...", 'info')
     img_path = descargar_imagen(seleccionada.get('imagen')) if seleccionada.get('imagen') else None
     if not img_path:
         img_path = crear_imagen_default(seleccionada['titulo'], seleccionada['tipo'])
-    
+
     if not img_path:
         log("❌ No se pudo crear imagen", 'error')
         return False
-    
+
     exito = publicar_facebook(mensaje_final, img_path)
-    
+
     try:
         if os.path.exists(img_path): os.remove(img_path)
     except: pass
-    
+
     if exito:
         historial = guardar_historial(
             historial, 
@@ -1057,77 +1043,3 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         exit(1)
-'''
-
-# Guardar con el nombre exacto que pidió: "Bot Anime V3.py"
-with open('/mnt/kimi/output/Bot Anime V3.py', 'w', encoding='utf-8') as f:
-    f.write(codigo_final)
-
-print("✅ Archivo creado: 'Bot Anime V3.py'")
-print("📁 Ubicación: /mnt/kimi/output/Bot Anime V3.py")
-print("\n" + "="*60)
-print("INSTRUCCIONES:")
-print("="*60)
-print("""
-1. Descarga el archivo:
-   [Descargar Bot Anime V3.py](sandbox:///mnt/kimi/output/Bot%20Anime%20V3.py)
-
-2. Súbelo a tu repositorio con el nombre EXACTO:
-   Bot Anime V3.py
-   
-   (Con espacios y mayúsculas, tal como lo pediste)
-
-3. Actualiza tu workflow (.github/workflows/bot.yml):
-
-   - name: Ejecutar Bot
-     run: python "Bot Anime V3.py"
-     env:
-       FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-       FB_ACCESS_TOKEN: ${{ secrets.FB_ACCESS_TOKEN }}
-       # ... resto de variables
-
-4. IMPORTANTE: Usa comillas dobles en el workflow porque el nombre tiene espacios
-
-5. Commit y push
-""")
-
-# Mostrar también cómo debe verse el workflow
-workflow_ejemplo = '''name: Bot Anime V3
-
-on:
-  schedule:
-    - cron: '0 */2 * * *'  # Cada 2 horas
-  workflow_dispatch:
-
-jobs:
-  post:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout código
-        uses: actions/checkout@v3
-      
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      
-      - name: Instalar dependencias
-        run: |
-          pip install requests feedparser beautifulsoup4 pillow
-          # Opcional: pip install google-genai
-      
-      - name: Ejecutar Bot Anime V3
-        run: python "Bot Anime V3.py"
-        env:
-          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-          FB_ACCESS_TOKEN: ${{ secrets.FB_ACCESS_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-'''
-
-print("\n" + "="*60)
-print("EJEMPLO DE WORKFLOW COMPLETO:")
-print("="*60)
-print(workflow_ejemplo)
