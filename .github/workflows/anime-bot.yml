@@ -2,75 +2,46 @@ name: Bot Anime V3
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # Ejecutar cada 2 horas (12 veces al día)
-  workflow_dispatch:  # Permite ejecución manual desde GitHub
-
-env:
-  # Variables de entorno globales (opcional)
-  PYTHONUNBUFFERED: "1"
+    - cron: '0 */2 * * *'  # Ejecutar cada 2 horas
+  workflow_dispatch:  # Permite ejecución manual
 
 jobs:
   publicar:
     name: Publicar en Facebook
     runs-on: ubuntu-latest
-
+    
     steps:
-      # 1. Checkout del código
       - name: Checkout del repositorio
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1  # Solo el último commit para velocidad
-
-      # 2. Configurar Python
+      
       - name: Setup Python 3.10
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'  # Cachear dependencias para velocidad
-
-      # 3. Instalar dependencias
+          cache: 'pip'
+      
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           pip install requests feedparser beautifulsoup4 pillow
-          # Intentar instalar google-genai pero no fallar si no está disponible
-          pip install google-genai || echo "⚠️ google-genai no disponible, usando modo manual"
-
-      # 4. Verificar que el archivo existe (debug)
+          pip install google-genai || echo "⚠️ google-genai no disponible"
+      
       - name: Verificar archivo del bot
         run: |
-          echo "📁 Contenido del directorio:"
-          ls -la
-          echo ""
-          if [ -f "Bot Anime V3.py" ]; then
-            echo "✅ Archivo 'Bot Anime V3.py' encontrado"
+          echo "📁 Archivos Python:"
+          ls -la *.py
+          if [ -f "bot_anime_v3.py" ]; then
+            echo "✅ Archivo 'bot_anime_v3.py' encontrado"
           else
-            echo "❌ Archivo 'Bot Anime V3.py' NO encontrado"
-            echo "🔍 Archivos .py en el directorio:"
-            find . -name "*.py" -type f
+            echo "❌ Archivo no encontrado"
             exit 1
           fi
-
-      # 5. Ejecutar el bot (con comillas por los espacios en el nombre)
+      
       - name: Ejecutar Bot Anime V3
-        run: python "Bot Anime V3.py"
+        run: python bot_anime_v3.py  # ← SIN comillas, nombre correcto
         env:
-          # Variables de entorno necesarias para el bot
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_ACCESS_TOKEN: ${{ secrets.FB_ACCESS_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-          # Opcional: configurar rutas de archivos
-          HISTORIAL_PATH: ${{ github.workspace }}/data/historial_anime_v3.json
-          ESTADO_PATH: ${{ github.workspace }}/data/estado_bot_anime_v3.json
-
-      # 6. Guardar datos generados (opcional - para persistir historial entre runs)
-      - name: Persistir datos
-        if: always()  # Ejecutar incluso si el paso anterior falla
-        run: |
-          if [ -d "data" ]; then
-            echo "📊 Datos generados:"
-            ls -la data/
-            # Aquí podrías agregar lógica para commit de datos si es necesario
-          fi
