@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 Bot Anime V3 - Sistema Anti-Duplicado + Contenido Variado
+FIXES:
+  1. Imagen de personaje: se relajan los filtros de proporción para aceptar retratos MAL
+  2. Anti-duplicado preventivo: se registra ANTES de publicar para evitar ejecuciones dobles
+  3. Filtro de relevancia: se valida que el texto generado por IA contenga referencias a anime
 """
 
 import requests
@@ -47,6 +51,19 @@ ANIME_POPULARES = [
     "One Punch Man", "Tokyo Ghoul", "Sword Art Online", "Steins;Gate",
     "Cowboy Bebop", "Code Geass", "Gintama", "Fairy Tail", "Black Clover",
     "Dr. Stone", "Fire Force", "Kaguya-sama", "Re:Zero", "Overlord"
+]
+
+# FIX 3: Palabras clave para validar que el texto generado sea sobre anime
+PALABRAS_CLAVE_ANIME = [
+    "anime", "manga", "personaje", "shonen", "seinen", "shoujo", "otaku",
+    "one piece", "naruto", "bleach", "dragon ball", "jujutsu", "demon slayer",
+    "attack on titan", "my hero academia", "chainsaw", "evangelion", "death note",
+    "fullmetal", "cowboy bebop", "hunter x hunter", "sword art", "re:zero",
+    "temporada", "episodio", "opening", "ending", "seiyuu", "estudio",
+    "shueisha", "mappa", "ufotable", "madhouse", "crunchyroll", "funimation",
+    "protagonista", "antagonista", "bankai", "jutsu", "quirk", "titan",
+    "shinigami", "nakama", "senpai", "sensei", "dojo", "akatsuki",
+    "mal_id", "myanimelist", "anilist", "airing", "kimono"
 ]
 
 RSS_FEEDS = {
@@ -175,6 +192,24 @@ def detectar_tipo(titulo, desc):
     return "noticia"
 
 # =============================================================================
+# FIX 3: VALIDADOR DE RELEVANCIA ANIME
+# =============================================================================
+
+def texto_es_relevante_anime(texto):
+    """
+    Verifica que el texto generado contenga al menos 2 referencias a anime.
+    Evita publicar contenido fuera de tema (noticias de famosos, recetas, etc.)
+    """
+    if not texto:
+        return False
+    texto_lower = texto.lower()
+    coincidencias = sum(1 for palabra in PALABRAS_CLAVE_ANIME if palabra in texto_lower)
+    if coincidencias < 2:
+        log(f"⚠️ Texto rechazado por irrelevante (solo {coincidencias} coincidencias anime)", 'advertencia')
+        return False
+    return True
+
+# =============================================================================
 # SISTEMA ANTI-DUPLICADO
 # =============================================================================
 
@@ -258,15 +293,21 @@ def obtener_personaje_jikan():
         resp = requests.get(detail_url, timeout=10)
 
         bio = ""
+        imagen_url = char_info.get('images', {}).get('jpg', {}).get('image_url')
+
         if resp.status_code == 200:
-            detail_data = resp.json()
-            bio = detail_data.get('data', {}).get('about', '')[:500]
+            detail_data = resp.json().get('data', {})
+            bio = detail_data.get('about', '')[:500]
+            # FIX 1: Preferir imagen de mayor resolución si está disponible
+            large_img = detail_data.get('images', {}).get('jpg', {}).get('large_image_url')
+            if large_img:
+                imagen_url = large_img
 
         return {
             'titulo': f"{char_info['name']} de {anime_title}",
             'descripcion': bio or f"Personaje de {anime_title}",
             'url': char_info.get('url', f"https://myanimelist.net/character/{char_id}"),
-            'imagen': char_info.get('images', {}).get('jpg', {}).get('image_url'),
+            'imagen': imagen_url,
             'fuente': 'MyAnimeList (Jikan)',
             'tipo': 'personaje',
             'puntaje': 85,
@@ -427,6 +468,13 @@ def obtener_noticias_newsapi():
             titulo = art.get('title', '').strip()
             if not titulo or '[Removed]' in titulo: continue
 
+            # FIX 3: Filtrar noticias que no sean sobre anime
+            titulo_lower = titulo.lower()
+            desc_lower = (art.get('description', '') or '').lower()
+            if not any(p in titulo_lower or p in desc_lower for p in ['anime', 'manga', 'otaku', 'animation', 'animación']):
+                log(f"🚫 Noticia descartada (no anime): {titulo[:50]}", 'debug')
+                continue
+
             noticias.append({
                 'titulo': limpiar_texto(titulo),
                 'descripcion': limpiar_texto(art.get('description', '')),
@@ -461,6 +509,12 @@ def obtener_noticias_rss(tipo="noticia"):
                 if not link: continue
 
                 desc = limpiar_texto(entry.get('summary', '') or entry.get('description', ''))
+
+                # FIX 3: Filtrar entradas RSS que no sean sobre anime
+                texto_combinado = f"{titulo} {desc}".lower()
+                if not any(p in texto_combinado for p in ['anime', 'manga', 'otaku', 'animation', 'animación', 'japanese']):
+                    log(f"🚫 RSS descartado (no anime): {titulo[:50]}", 'debug')
+                    continue
 
                 imagen = None
                 if 'media_content' in entry:
@@ -557,24 +611,26 @@ def redactar_manual(titulo, contenido, tipo="noticia", fuente="", metadata=None)
     return truncar_texto("\n".join(lineas), MAX_CARACTERES_FB)
 
 def redactar_con_ia(titulo, contenido, tipo="noticia", metadata=None):
+    # FIX 3: Prompt más estricto que obliga a mencionar anime/manga explícitamente
     prompt = f"""Crea una publicación de Facebook sobre anime en ESPAÑOL LATINO (tú, no usted).
+IMPORTANTE: El tema es EXCLUSIVAMENTE anime/manga. NO menciones celebridades, comida, noticias generales ni ningún tema fuera del mundo del anime.
 
-TÍTULO: {titulo}
+TÍTULO DEL ANIME/PERSONAJE: {titulo}
 CONTENIDO: {contenido[:600]}
-TIPO: {tipo}
+TIPO DE POST: {tipo} (personaje de anime / noticia de anime / curiosidad de anime)
 
-Estructura:
-{random.choice(["📢", "🔥", "🎌", "✨"])} [Hook llamativo]
+Estructura OBLIGATORIA:
+{random.choice(["📢", "🔥", "🎌", "✨"])} [Hook llamativo sobre anime]
 
 🎌 [Título corto]
 
-📰 [Resumen 2-3 oraciones con datos concretos]
+📰 [Resumen 2-3 oraciones con datos concretos del anime/personaje]
 
-💬 [Pregunta para engagement]
+💬 [Pregunta para fans de anime]
 
-[3 hashtags]
+[3 hashtags de anime]
 
-Máximo 1500 caracteres."""
+Máximo 1500 caracteres. El texto DEBE mencionar anime, personaje, o el título específico."""
 
     if AI_SERVICE == "openrouter":
         try:
@@ -598,8 +654,11 @@ Máximo 1500 caracteres."""
                 data = resp.json()
                 if 'choices' in data and len(data['choices']) > 0:
                     texto = data['choices'][0]['message']['content'].strip()
-                    if any(c in texto.lower() for c in 'ñáéíóú') or len(texto) > 100:
+                    # FIX 3: Validar relevancia del texto generado
+                    if texto_es_relevante_anime(texto) and len(texto) > 100:
                         return truncar_texto(texto, 1600)
+                    elif len(texto) > 100:
+                        log("⚠️ Texto IA descartado: no es sobre anime", 'advertencia')
         except Exception as e:
             log(f"Error OpenRouter: {e}", 'debug')
 
@@ -616,8 +675,11 @@ Máximo 1500 caracteres."""
             )
             if response and response.text:
                 texto = response.text.strip()
-                if any(c in texto.lower() for c in 'ñáéíóú') or len(texto) > 100:
+                # FIX 3: Validar relevancia del texto generado
+                if texto_es_relevante_anime(texto) and len(texto) > 100:
                     return truncar_texto(texto, 1600)
+                elif len(texto) > 100:
+                    log("⚠️ Texto IA descartado: no es sobre anime", 'advertencia')
         except Exception as e:
             log(f"Error Gemini: {e}", 'debug')
 
@@ -659,6 +721,11 @@ def extraer_web(url):
         return None, None
 
 def descargar_imagen(url):
+    """
+    FIX 1: Se relajan los filtros de proporción para aceptar retratos verticales de MAL.
+    Las imágenes de personajes de MyAnimeList son típicamente retratos (más altas que anchas),
+    el filtro original h/w > 3 las rechazaba. Ahora se acepta hasta 4:1 de alto.
+    """
     if not url: return None
     for bad in ['google.com', 'gstatic.com', 'facebook.com', 'logo', 'icon', 'favicon']:
         if bad in url.lower(): return None
@@ -672,15 +739,39 @@ def descargar_imagen(url):
 
         img = Image.open(BytesIO(r.content))
         w, h = img.size
-        if w < 400 or h < 300 or w/h > 3 or h/w > 3: return None
+
+        # FIX 1: Antes era w < 400 or h < 300 or w/h > 3 or h/w > 3
+        # Las imágenes de MAL son ~225x350px (retratos pequeños). Se relaja el mínimo
+        # y se amplía la tolerancia de proporción vertical a 5:1
+        if w < 200 or h < 200:
+            log(f"🖼️ Imagen demasiado pequeña ({w}x{h}), descartando", 'debug')
+            return None
+        if w / h > 4:
+            log(f"🖼️ Imagen demasiado ancha ({w}x{h}), descartando", 'debug')
+            return None
+        # Permitir retratos verticales (h/w hasta 5:1) — típico en MAL
+        if h / w > 5:
+            log(f"🖼️ Imagen demasiado alta ({w}x{h}), descartando", 'debug')
+            return None
 
         if img.mode in ('RGBA', 'P'): img = img.convert('RGB')
+
+        # FIX 1: Para retratos pequeños de MAL, ampliar en lugar de reducir
+        # Asegurar que la imagen publicada tenga al menos 600px en el lado mayor
+        min_dimension = 600
+        if max(w, h) < min_dimension:
+            factor = min_dimension / max(w, h)
+            new_w = int(w * factor)
+            new_h = int(h * factor)
+            img = img.resize((new_w, new_h), Image.LANCZOS)
+            log(f"🖼️ Imagen ampliada de {w}x{h} a {new_w}x{new_h}", 'debug')
+
         img.thumbnail((1200, 1200))
 
         path = f'/tmp/anime_{generar_hash(url)[:8]}.jpg'
         img.save(path, 'JPEG', quality=85)
 
-        if os.path.getsize(path) < 10000:
+        if os.path.getsize(path) < 5000:  # FIX 1: Reducido de 10KB a 5KB para imágenes pequeñas
             os.remove(path)
             return None
         return path
@@ -980,6 +1071,11 @@ def main():
             )
             log("✅ Texto manual generado", 'info')
 
+        # FIX 3: Validar relevancia del texto manual también
+        if not texto_es_relevante_anime(mensaje_final):
+            log("⚠️ Texto irrelevante, probando siguiente candidato", 'advertencia')
+            continue
+
         if mensaje_final and len(mensaje_final) > 50:
             seleccionada = candidato
             break
@@ -1002,11 +1098,26 @@ def main():
     log("🖼️ Procesando imagen...", 'info')
     img_path = descargar_imagen(seleccionada.get('imagen')) if seleccionada.get('imagen') else None
     if not img_path:
+        log("⚠️ Imagen original no válida, usando imagen default", 'advertencia')
         img_path = crear_imagen_default(seleccionada['titulo'], seleccionada['tipo'])
 
     if not img_path:
         log("❌ No se pudo crear imagen", 'error')
         return False
+
+    # FIX 2: Registrar en historial ANTES de publicar para evitar duplicados
+    # si el bot se interrumpe y se vuelve a ejecutar inmediatamente
+    historial = guardar_historial(
+        historial,
+        seleccionada['url'],
+        seleccionada['titulo'],
+        seleccionada['tipo'],
+        seleccionada['descripcion']
+    )
+    estado['ultima'] = datetime.now().isoformat()
+    estado['hoy'] = estado.get('hoy', 0) + 1
+    estado['tipo_ultimo'] = seleccionada['tipo']
+    guardar_json(ESTADO_PATH, estado)
 
     exito = publicar_facebook(mensaje_final, img_path)
 
@@ -1015,21 +1126,10 @@ def main():
     except: pass
 
     if exito:
-        historial = guardar_historial(
-            historial, 
-            seleccionada['url'], 
-            seleccionada['titulo'],
-            seleccionada['tipo'],
-            seleccionada['descripcion']
-        )
-        estado['ultima'] = datetime.now().isoformat()
-        estado['hoy'] = estado.get('hoy', 0) + 1
-        estado['tipo_ultimo'] = seleccionada['tipo']
-        guardar_json(ESTADO_PATH, estado)
         log(f"✅ Total histórico: {historial['estadisticas']['total']}", 'exito')
         return True
     else:
-        log("❌ Falló publicación", 'error')
+        log("❌ Falló publicación en Facebook (contenido ya registrado en historial)", 'error')
         return False
 
 if __name__ == "__main__":
