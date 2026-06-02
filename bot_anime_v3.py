@@ -231,7 +231,7 @@ def es_contenido_anime(titulo, descripcion=""):
         log(f"🚫 Bloqueado (persona real/off-topic): {titulo[:60]}", 'debug')
         return False
     coincidencias = sum(1 for p in PALABRAS_CLAVE_ANIME if p in texto)
-    if coincidencias < 2:
+    if coincidencias < 1:
         log(f"🚫 Bloqueado (no anime, solo {coincidencias} coincidencias): {titulo[:60]}", 'debug')
         return False
     return True
@@ -363,6 +363,20 @@ class AntiDuplicado:
 # =============================================================================
 # OBTENCIÓN DE IMÁGENES
 # =============================================================================
+
+def deduplicar_imagenes(urls):
+    """Elimina URLs de imagen duplicadas o muy similares."""
+    vistas = set()
+    resultado = []
+    for url in urls:
+        if not url: continue
+        # Normalizar URL para comparar (quitar parámetros de tamaño)
+        url_norm = re.sub(r'[?&](width|height|w|h|size|quality|q)=\d+', '', url.lower().strip())
+        url_norm = re.sub(r'/(small|medium|large|original|thumb)/', '/X/', url_norm)
+        if url_norm not in vistas:
+            vistas.add(url_norm)
+            resultado.append(url)
+    return resultado
 
 def descargar_imagen_url(url):
     """Descarga una imagen desde URL y retorna objeto PIL o None."""
@@ -635,17 +649,18 @@ def obtener_anime_jikan():
         desc = f"{sinopsis} Puntuación: {score}/10. Episodios: {episodios}."
 
         # Imágenes adicionales del mismo anime (personajes)
-        imagenes = [imagen_url]
+        imagenes_extra = []
         time.sleep(0.5)
         chars_url = f"https://api.jikan.moe/v4/anime/{anime_data['mal_id']}/characters"
         resp2 = requests.get(chars_url, timeout=10)
         if resp2.status_code == 200:
             chars = resp2.json().get('data', [])
-            for c in chars[:5]:
+            for c in chars[:8]:
                 img = c['character'].get('images', {}).get('jpg', {}).get('large_image_url')
-                if img and 'questionmark' not in img and img not in imagenes:
-                    imagenes.append(img)
-                if len(imagenes) >= 3: break
+                if img and 'questionmark' not in img:
+                    imagenes_extra.append(img)
+                if len(imagenes_extra) >= 2: break
+        imagenes = deduplicar_imagenes([imagen_url] + imagenes_extra)[:3]
 
         return {
             'titulo': f"📊 {titulo}",
@@ -713,9 +728,8 @@ def obtener_curiosidad_anilist():
 
         titulo, desc = traducir_y_adaptar(titulo, desc, "curiosidad")
 
-        imagenes = [imagen_url]
-        if banner_url and banner_url != imagen_url:
-            imagenes.append(banner_url)
+        imagenes_raw = [imagen_url, banner_url]
+        imagenes = deduplicar_imagenes([i for i in imagenes_raw if i])[:2]
 
         return {
             'titulo': f"✨ Curiosidad: {titulo}",
@@ -778,10 +792,9 @@ def obtener_anime_kitsu():
 
         titulo, sinopsis = traducir_y_adaptar(titulo, sinopsis, "noticia")
 
-        cover = attrs.get('coverImage', {})
-        imagenes = [imagen_url]
-        if cover.get('large') and cover['large'] != imagen_url:
-            imagenes.append(cover['large'])
+        cover = attrs.get('coverImage', {}) or {}
+        imagenes_raw = [imagen_url, cover.get('original'), cover.get('large'), cover.get('small')]
+        imagenes = deduplicar_imagenes([i for i in imagenes_raw if i])[:2]
 
         return {
             'titulo': f"🦊 {titulo}",
