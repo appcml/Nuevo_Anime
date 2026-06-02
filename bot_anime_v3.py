@@ -949,42 +949,6 @@ def redactar_post(titulo, contenido, tipo, metadata=None):
         "noticia":   ["📢 ¡Última hora!", "🔥 ¡Breaking news anime!", "🎌 ¡Anuncio oficial!"]
     }
 
-    prompt = f"""Eres el community manager de "Nuevo Anime", una página de Facebook para otakus hispanohablantes.
-Crea una publicación en ESPAÑOL LATINO (tú, no vos ni usted) que sea atractiva, directa y con personalidad.
-
-TEMA: {titulo}
-CONTENIDO: {contenido[:700]}
-TIPO: {tipo}
-
-ESTRUCTURA OBLIGATORIA:
-[emoji] [Hook llamativo - máximo 1 línea]
-
-🎌 [Título corto del post]
-
-📰 [2-3 oraciones con datos concretos y entretenidos]
-
-💬 [Pregunta para generar comentarios de fans]
-
-[Hashtags]
-
-REGLAS:
-- Máximo 1400 caracteres en total
-- Lenguaje casual y apasionado por el anime
-- NUNCA menciones personas reales (deportistas, políticos, actores)
-- Enfocado 100% en anime/manga
-- Los hashtags YA los agrego yo, no los incluyas
-- NO incluyas URL en el texto"""
-
-    texto = llamar_ia(prompt, max_tokens=500)
-
-    if texto and es_contenido_anime(texto) and len(texto) > 80:
-        return truncar_texto(texto, 1400)
-
-    # Fallback manual
-    hook = random.choice(hooks.get(tipo, hooks["noticia"]))
-    oraciones = [s.strip() for s in re.split(r'[.!?]+', contenido) if len(s.strip()) > 20][:3]
-    resumen = ". ".join(oraciones) + "." if oraciones else contenido[:250]
-
     ctas = {
         "personaje": "¿Es tu personaje favorito? ¡Déjalo en los comentarios! 👇",
         "databook":  "¿Qué dato te sorprendió más? 👇",
@@ -993,10 +957,45 @@ REGLAS:
         "noticia":   "¿Qué opinás de esto? 👇"
     }
 
-    return truncar_texto(
-        f"{hook}\n\n🎌 {titulo[:70]}\n\n📰 {resumen}\n\n💬 {ctas.get(tipo, '¿Qué opinás? 👇')}",
-        1400
-    )
+    prompt = f"""Eres el community manager de "Nuevo Anime", página de Facebook para otakus hispanohablantes.
+Redacta una publicación COMPLETA en ESPAÑOL LATINO (tú, nunca vos ni usted).
+
+TEMA: {titulo}
+CONTENIDO BASE: {contenido[:1000]}
+TIPO: {tipo}
+
+ESTRUCTURA:
+[emoji] [Hook llamativo — 1 línea que genere curiosidad]
+
+🎌 [Título del post — máximo 80 caracteres]
+
+📰 [3-4 oraciones completas con datos concretos. NO cortes las oraciones a la mitad. Cada oración debe terminar con punto, signo de exclamación o interrogación.]
+
+💬 [{ctas.get(tipo, "¿Qué opinás? 👇")}]
+
+REGLAS ESTRICTAS:
+- Todas las oraciones deben estar COMPLETAS, nunca cortadas
+- Lenguaje casual y apasionado, nada de texto formal
+- NUNCA menciones personas reales (deportistas, políticos, actores reales)
+- Solo anime y manga
+- NO incluyas hashtags (los agrego yo)
+- NO incluyas URLs"""
+
+    # Usar más tokens para que la IA no corte el texto
+    texto = llamar_ia(prompt, max_tokens=900)
+
+    if texto and es_contenido_anime(texto) and len(texto) > 80:
+        # NO truncar — dejar el texto completo que generó la IA
+        return texto.strip()
+
+    # Fallback manual — oraciones completas sin truncar
+    hook = random.choice(hooks.get(tipo, hooks["noticia"]))
+    # Dividir en oraciones completas
+    oraciones_raw = re.split(r'(?<=[.!?])\s+', contenido.strip())
+    oraciones = [o.strip() for o in oraciones_raw if len(o.strip()) > 15][:4]
+    resumen = " ".join(oraciones) if oraciones else contenido[:500]
+
+    return f"{hook}\n\n🎌 {titulo[:80]}\n\n📰 {resumen}\n\n💬 {ctas.get(tipo, '¿Qué opinás? 👇')}"
 
 # =============================================================================
 # HISTORIAL Y ESTADO
@@ -1279,10 +1278,9 @@ def main():
                 except: pass
             continue
 
-        # Agregar hashtags SEO
+        # Agregar hashtags SEO — sin truncar, Facebook acepta hasta 63.000 chars
         hashtags = HASHTAGS.get(candidato['tipo'], HASHTAGS['noticia'])
-        mensaje_final = f"{texto}\n\n{hashtags}"
-        mensaje_final = truncar_texto(mensaje_final, MAX_CARACTERES_FB)
+        mensaje_final = f"{texto.strip()}\n\n{hashtags}"
 
         seleccionada = candidato
         imagenes_paths = imgs_validas
