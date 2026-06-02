@@ -48,8 +48,8 @@ ESTADO_PATH    = os.getenv('ESTADO_PATH',    os.path.join(BASE_DIR, 'data', 'est
 LOGO_PATH      = os.getenv('LOGO_PATH',      os.path.join(BASE_DIR, 'assets', 'nuevo_anime_logo.png'))
 
 # Publicación
-TIEMPO_ENTRE_PUBLICACIONES = 90   # minutos mínimos entre posts
-MAX_PUBLICACIONES_DIA      = 12
+TIEMPO_ENTRE_PUBLICACIONES = 240  # mínimo 4 horas entre posts (seguridad)
+MAX_PUBLICACIONES_DIA      = 3
 UMBRAL_SIMILITUD_TITULO    = 0.85
 MAX_CARACTERES_FB          = 1800
 
@@ -241,53 +241,98 @@ def es_contenido_anime(titulo, descripcion=""):
 # =============================================================================
 
 def detectar_idioma(texto):
-    """Retorna True si el texto está en inglés."""
-    palabras_ingles = ['the ', 'and ', ' for ', ' with ', ' has ', ' have ', ' are ', ' was ', ' were ', ' this ', ' that ', ' from ', ' been ', ' will ', ' they ', ' their ']
+    """Retorna True si el texto está predominantemente en inglés."""
+    palabras_ingles = [
+        ' the ', ' and ', ' for ', ' with ', ' has ', ' have ', ' are ',
+        ' was ', ' were ', ' this ', ' that ', ' from ', ' been ', ' will ',
+        ' they ', ' their ', ' when ', ' which ', ' about ', ' after ',
+        ' also ', ' into ', ' more ', ' some ', ' than ', ' then ',
+        ' where ', ' while ', ' would ', ' could ', ' should '
+    ]
+    palabras_espanol = [
+        ' el ', ' la ', ' los ', ' las ', ' un ', ' una ', ' del ',
+        ' que ', ' en ', ' es ', ' se ', ' con ', ' por ', ' para ',
+        ' una ', ' esto ', ' este ', ' pero ', ' como ', ' más ',
+        ' también ', ' cuando ', ' donde ', ' tiene ', ' está '
+    ]
     texto_lower = f" {texto.lower()} "
-    hits = sum(1 for p in palabras_ingles if p in texto_lower)
-    return hits >= 3
+    hits_en = sum(1 for p in palabras_ingles if p in texto_lower)
+    hits_es = sum(1 for p in palabras_espanol if p in texto_lower)
+    return hits_en >= 3 and hits_en > hits_es
+
+def traducir_libre(texto, max_chars=1000):
+    """Traduce usando LibreTranslate (API gratuita, sin clave)."""
+    servidores = [
+        "https://libretranslate.com/translate",
+        "https://translate.argosopentech.com/translate",
+        "https://libretranslate.de/translate",
+    ]
+    payload = {"q": texto[:max_chars], "source": "en", "target": "es", "format": "text"}
+    for servidor in servidores:
+        try:
+            r = requests.post(servidor, json=payload, timeout=8)
+            if r.status_code == 200:
+                result = r.json()
+                traducido = result.get("translatedText", "").strip()
+                if traducido and len(traducido) > 20:
+                    log(f"✅ LibreTranslate OK ({servidor.split('/')[2]})", "debug")
+                    return traducido
+        except Exception as e:
+            log(f"⚠️ LibreTranslate falló ({servidor.split('/')[2]}): {e}", "debug")
+            continue
+    return None
 
 def traducir_y_adaptar(titulo, contenido, tipo="noticia"):
     """
-    Detecta idioma y traduce al español latino con IA.
-    Retorna (None, None) si el texto está en inglés y no hay IA disponible
-    para forzar el descarte del contenido.
+    Detecta idioma y traduce al español.
+    Orden de intentos: 1) IA (OpenRouter/Gemini) 2) LibreTranslate 3) Descartar
     """
     if not detectar_idioma(f"{titulo} {contenido}"):
         return titulo, contenido  # Ya está en español
 
-    log("🌐 Contenido en inglés — traduciendo...", 'info')
+    log("🌐 Contenido en inglés — traduciendo...", "info")
 
-    if not AI_SERVICE:
-        log("⛔ Sin IA disponible — descartando contenido en inglés", 'advertencia')
-        return None, None  # Señal de descarte
-
-    prompt = f"""Traduce y adapta este contenido de anime al ESPAÑOL LATINO natural (tú, no vos ni usted).
-Mantén nombres propios de anime/personajes en su forma original (ej: "My Hero Academia", "Deku", "Bakugo").
-Devuelve SOLO un JSON con este formato exacto, sin backticks ni texto extra:
+    # Intento 1: IA si está disponible
+    if AI_SERVICE:
+        prompt = f"""Traduce este contenido de anime al ESPAÑOL LATINO natural (tú, nunca vos ni usted).
+Conserva nombres propios de anime/personajes tal como están (ej: "My Hero Academia", "Deku").
+Responde SOLO con JSON, sin backticks ni texto adicional:
 {{"titulo": "...", "contenido": "..."}}
 
 TÍTULO: {titulo}
 CONTENIDO: {contenido[:800]}"""
 
-    resultado = llamar_ia(prompt, max_tokens=700)
-    if resultado:
-        try:
-            limpio = re.sub(r'```json|```', '', resultado).strip()
-            # Buscar el JSON aunque haya texto antes/después
-            match = re.search(r'\{{.*\}}', limpio, re.DOTALL)
-            if match:
-                data = json.loads(match.group())
-                t = data.get('titulo', '').strip()
-                c = data.get('contenido', '').strip()
-                if t and c and len(c) > 30:
-                    log(f"✅ Traducido: {t[:60]}", 'debug')
-                    return t, c
-        except Exception as e:
-            log(f"Error parseando traducción: {e}", 'debug')
+        resultado = llamar_ia(prompt, max_tokens=700)
+        if resultado:
+            try:
+                limpio = re.sub(r"```json|```", "", resultado).strip()
+                match = re.search(r"\{.*\}", limpio, re.DOTALL)
+                if match:
+                    data = json.loads(match.group())
+                    t = data.get("titulo", "").strip()
+                    c = data.get("contenido", "").strip()
+                    if t and c and len(c) > 30:
+                        log(f"✅ IA tradujo: {t[:60]}", "debug")
+                        return t, c
+            except Exception as e:
+                log(f"Error parseando traducción IA: {e}", "debug")
 
-    log("⚠️ Fallo en traducción — descartando contenido en inglés", 'advertencia')
-    return None, None  # Descartar si no se pudo traducir
+    # Intento 2: LibreTranslate (gratis, sin API key)
+    log("🔄 Intentando LibreTranslate...", "info")
+    titulo_es = traducir_libre(titulo, max_chars=200)
+    contenido_es = traducir_libre(contenido, max_chars=800)
+
+    if titulo_es and contenido_es:
+        log(f"✅ LibreTranslate OK: {titulo_es[:60]}", "debug")
+        return titulo_es, contenido_es
+
+    if titulo_es and not contenido_es:
+        # Al menos el título traducido
+        return titulo_es, contenido
+
+    # Intento 3: Descartar — no publicar en inglés
+    log("⛔ Sin traducción disponible — descartando contenido en inglés", "advertencia")
+    return None, None
 
 def llamar_ia(prompt, max_tokens=500):
     """Llama a la IA disponible y devuelve el texto generado."""
@@ -950,12 +995,35 @@ def redactar_post(titulo, contenido, tipo, metadata=None):
     }
 
     ctas = {
-        "personaje": "¿Es tu personaje favorito? ¡Déjalo en los comentarios! 👇",
-        "databook":  "¿Qué dato te sorprendió más? 👇",
-        "curiosidad": "¿Lo sabías? ¡Cuéntame! 👇",
-        "estreno":   "¿Lo vas a ver? 👇",
-        "noticia":   "¿Qué opinás de esto? 👇"
+        "personaje": [
+            "¿Es tu personaje favorito? Comentá abajo 👇 y seguí @NuevoAnime para más contenido así.",
+            "¿Lo agregarías a tu top? Decinos en comentarios 👇 — seguí la página para no perderte nada.",
+            "¿Qué poder o habilidad le envidias? 👇 Seguí Nuevo Anime para más perfiles de personajes.",
+        ],
+        "databook": [
+            "¿Te sorprendió algún dato? Comentá 👇 y seguí Nuevo Anime para más databoks.",
+            "¿Cuál de estos datos no sabías? 👇 Dale follow para más info oficial de tus animes favoritos.",
+            "¿Coincidís con el puntaje? Decinos 👇 y seguí la página para más análisis de anime.",
+        ],
+        "curiosidad": [
+            "¿Lo sabías? Comentá 👇 y seguí Nuevo Anime para más curiosidades otaku cada día.",
+            "¿Te sorprendió? 👇 Seguí la página para no perderte las mejores curiosidades del anime.",
+            "¿Cuántos puntos otaku sumás? Comentá 👇 — seguí Nuevo Anime para más datos que te vuelan la cabeza.",
+        ],
+        "estreno": [
+            "¿Lo vas a ver? Comentá 👇 y seguí Nuevo Anime para estar al día con todos los estrenos.",
+            "¿Ya lo tenés en tu lista? 👇 Seguí la página para no perderte ningún estreno de la temporada.",
+            "¿Cuántas ganas le tenés del 1 al 10? 👇 Seguí Nuevo Anime para todos los estrenos de anime.",
+        ],
+        "noticia": [
+            "¿Qué opinás? Comentá 👇 y seguí Nuevo Anime para estar siempre al día con el mundo anime.",
+            "¿Estás de acuerdo? 👇 Seguí la página para no perderte ninguna novedad del mundo anime.",
+            "¿Te parece bien o mal? Decinos 👇 — seguí Nuevo Anime para las últimas noticias del anime.",
+        ],
     }
+
+    import random as _r
+    cta_elegido = _r.choice(ctas.get(tipo, ctas["noticia"]))
 
     prompt = f"""Eres el community manager de "Nuevo Anime", página de Facebook para otakus hispanohablantes.
 Redacta una publicación COMPLETA en ESPAÑOL LATINO (tú, nunca vos ni usted).
@@ -971,7 +1039,7 @@ ESTRUCTURA:
 
 📰 [3-4 oraciones completas con datos concretos. NO cortes las oraciones a la mitad. Cada oración debe terminar con punto, signo de exclamación o interrogación.]
 
-💬 [{ctas.get(tipo, "¿Qué opinás? 👇")}]
+💬 [{cta_elegido}]
 
 REGLAS ESTRICTAS:
 - Todas las oraciones deben estar COMPLETAS, nunca cortadas
@@ -995,7 +1063,7 @@ REGLAS ESTRICTAS:
     oraciones = [o.strip() for o in oraciones_raw if len(o.strip()) > 15][:4]
     resumen = " ".join(oraciones) if oraciones else contenido[:500]
 
-    return f"{hook}\n\n🎌 {titulo[:80]}\n\n📰 {resumen}\n\n💬 {ctas.get(tipo, '¿Qué opinás? 👇')}"
+    return f"{hook}\n\n🎌 {titulo[:80]}\n\n📰 {resumen}\n\n💬 {cta_elegido}"
 
 # =============================================================================
 # HISTORIAL Y ESTADO
@@ -1029,21 +1097,68 @@ def guardar_historial(historial, url, titulo, tipo, contenido=""):
     guardar_json(HISTORIAL_PATH, historial)
     return historial
 
+# Horarios óptimos para audiencia hispanohablante (Chile UTC-4, hora local)
+# Basado en datos Metricool, Sprout Social y Comscore 2025-2026
+# Ventanas horarias: mañana (9-11h), mediodía (13-15h), noche (20-22h)
+# Estas horas están en UTC — el bot corre en GitHub Actions (UTC)
+# Chile UTC-4: 9h local = 13h UTC | 13h local = 17h UTC | 20h local = 00h UTC
+# México UTC-6: 9h local = 15h UTC | 13h local = 19h UTC | 20h local = 02h UTC
+# España UTC+2: 9h local = 7h UTC  | 13h local = 11h UTC | 20h local = 18h UTC
+# Ventanas UTC que cubren el peak de TODA la audiencia hispanohablante simultáneamente:
+
+VENTANAS_PUBLICACION = [
+    # (hora_inicio_UTC, hora_fin_UTC, descripcion)
+    (11, 13, "Mediodía España / Mañana México"),   # España 13-15h, México 5-7h (madrugada MX, ok para ES/AR)
+    (15, 17, "Tarde España / Mediodía Chile-AR"),   # España 17-19h, Chile 11-13h, México 9-11h ← MEJOR
+    (22, 24, "Noche Chile-AR / Tarde México"),       # Chile 18-20h, Argentina 19-21h, México 16-18h ← MEJOR
+]
+
+# Slots específicos óptimos (hora UTC exacta para publicar)
+SLOTS_UTILES = [15, 16, 22, 23]  # Los 4 mejores momentos del día en UTC
+
+def esta_en_horario_optimo():
+    """Verifica si la hora actual UTC está en una ventana de alta actividad."""
+    hora_utc = datetime.utcnow().hour
+    for inicio, fin, desc in VENTANAS_PUBLICACION:
+        if inicio <= hora_utc < fin:
+            log(f"✅ Horario óptimo: {desc} ({hora_utc}h UTC)", "info")
+            return True, desc
+    # Calcular próxima ventana
+    proxima = None
+    for inicio, fin, desc in VENTANAS_PUBLICACION:
+        if inicio > hora_utc:
+            proxima = inicio
+            break
+    if proxima is None:
+        proxima = VENTANAS_PUBLICACION[0][0] + 24  # Mañana
+    espera = proxima - hora_utc
+    log(f"⏰ Fuera de horario ({hora_utc}h UTC) — próxima ventana en ~{espera}h", "advertencia")
+    return False, None
+
 def verificar_limite():
     estado = cargar_json(ESTADO_PATH, {'ultima': None, 'hoy': 0, 'fecha': None})
     hoy = datetime.now().strftime('%Y-%m-%d')
     if estado.get('fecha') != hoy:
         estado = {'ultima': None, 'hoy': 0, 'fecha': hoy}
+
     if estado['hoy'] >= MAX_PUBLICACIONES_DIA:
-        log(f"🚫 Límite diario alcanzado ({MAX_PUBLICACIONES_DIA})", 'advertencia')
+        log(f"🚫 Límite diario alcanzado ({MAX_PUBLICACIONES_DIA}/día)", 'advertencia')
         return False, estado
+
+    # Verificar horario óptimo
+    en_horario, ventana = esta_en_horario_optimo()
+    if not en_horario:
+        return False, estado
+
+    # Verificar tiempo mínimo entre posts
     if estado.get('ultima'):
         try:
             minutos = (datetime.now() - datetime.fromisoformat(estado['ultima'])).total_seconds() / 60
             if minutos < TIEMPO_ENTRE_PUBLICACIONES:
-                log(f"⏱️ Esperando {TIEMPO_ENTRE_PUBLICACIONES - minutos:.0f} min más", 'info')
+                log(f"⏱️ Esperando cooldown: {TIEMPO_ENTRE_PUBLICACIONES - minutos:.0f} min más", 'info')
                 return False, estado
         except: pass
+
     return True, estado
 
 def seleccionar_tipo(historial):
