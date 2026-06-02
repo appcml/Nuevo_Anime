@@ -240,37 +240,54 @@ def es_contenido_anime(titulo, descripcion=""):
 # TRADUCCIÓN Y ADAPTACIÓN AL ESPAÑOL
 # =============================================================================
 
-def traducir_y_adaptar(titulo, contenido, tipo="noticia"):
-    """Detecta si el contenido está en inglés y lo traduce al español latino con IA."""
-    # Detección simple de inglés
-    palabras_ingles = ['the', 'and', 'for', 'with', 'has', 'have', 'are', 'was', 'were', 'this', 'that']
-    texto_lower = f"{titulo} {contenido}".lower()
-    es_ingles = sum(1 for p in palabras_ingles if f' {p} ' in f' {texto_lower} ') >= 3
+def detectar_idioma(texto):
+    """Retorna True si el texto está en inglés."""
+    palabras_ingles = ['the ', 'and ', ' for ', ' with ', ' has ', ' have ', ' are ', ' was ', ' were ', ' this ', ' that ', ' from ', ' been ', ' will ', ' they ', ' their ']
+    texto_lower = f" {texto.lower()} "
+    hits = sum(1 for p in palabras_ingles if p in texto_lower)
+    return hits >= 3
 
-    if not es_ingles:
+def traducir_y_adaptar(titulo, contenido, tipo="noticia"):
+    """
+    Detecta idioma y traduce al español latino con IA.
+    Retorna (None, None) si el texto está en inglés y no hay IA disponible
+    para forzar el descarte del contenido.
+    """
+    if not detectar_idioma(f"{titulo} {contenido}"):
         return titulo, contenido  # Ya está en español
 
-    log("🌐 Traduciendo contenido al español...", 'info')
+    log("🌐 Contenido en inglés — traduciendo...", 'info')
 
-    prompt = f"""Traduce y adapta este contenido de anime al ESPAÑOL LATINO natural (tú, no usted).
-Mantén nombres propios de anime/personajes en su forma original.
-Devuelve SOLO un JSON con este formato exacto:
+    if not AI_SERVICE:
+        log("⛔ Sin IA disponible — descartando contenido en inglés", 'advertencia')
+        return None, None  # Señal de descarte
+
+    prompt = f"""Traduce y adapta este contenido de anime al ESPAÑOL LATINO natural (tú, no vos ni usted).
+Mantén nombres propios de anime/personajes en su forma original (ej: "My Hero Academia", "Deku", "Bakugo").
+Devuelve SOLO un JSON con este formato exacto, sin backticks ni texto extra:
 {{"titulo": "...", "contenido": "..."}}
 
-TÍTULO ORIGINAL: {titulo}
-CONTENIDO ORIGINAL: {contenido[:800]}"""
+TÍTULO: {titulo}
+CONTENIDO: {contenido[:800]}"""
 
-    resultado = llamar_ia(prompt, max_tokens=600)
+    resultado = llamar_ia(prompt, max_tokens=700)
     if resultado:
         try:
-            # Limpiar posibles backticks de markdown
             limpio = re.sub(r'```json|```', '', resultado).strip()
-            data = json.loads(limpio)
-            return data.get('titulo', titulo), data.get('contenido', contenido)
-        except:
-            pass
+            # Buscar el JSON aunque haya texto antes/después
+            match = re.search(r'\{{.*\}}', limpio, re.DOTALL)
+            if match:
+                data = json.loads(match.group())
+                t = data.get('titulo', '').strip()
+                c = data.get('contenido', '').strip()
+                if t and c and len(c) > 30:
+                    log(f"✅ Traducido: {t[:60]}", 'debug')
+                    return t, c
+        except Exception as e:
+            log(f"Error parseando traducción: {e}", 'debug')
 
-    return titulo, contenido  # Fallback: devolver original
+    log("⚠️ Fallo en traducción — descartando contenido en inglés", 'advertencia')
+    return None, None  # Descartar si no se pudo traducir
 
 def llamar_ia(prompt, max_tokens=500):
     """Llama a la IA disponible y devuelve el texto generado."""
@@ -598,6 +615,9 @@ def obtener_personaje_jikan():
 
         # Traducir si está en inglés
         titulo, desc = traducir_y_adaptar(titulo, desc, "personaje")
+        if titulo is None:
+            log("⛔ Jikan personaje descartado (inglés sin IA)", "debug")
+            return None
 
         return {
             'titulo': titulo,
@@ -645,6 +665,9 @@ def obtener_anime_jikan():
         episodios = anime_data.get('episodes', 'N/A')
 
         titulo, sinopsis = traducir_y_adaptar(titulo, sinopsis, "databook")
+        if titulo is None:
+            log("⛔ Jikan databook descartado (inglés sin IA)", "debug")
+            return None
 
         desc = f"{sinopsis} Puntuación: {score}/10. Episodios: {episodios}."
 
@@ -727,6 +750,9 @@ def obtener_curiosidad_anilist():
         studio = (anime.get('studios', {}).get('nodes') or [{}])[0].get('name', 'Estudio desconocido')
 
         titulo, desc = traducir_y_adaptar(titulo, desc, "curiosidad")
+        if titulo is None:
+            log("⛔ AniList descartado (inglés sin IA)", "debug")
+            return None
 
         imagenes_raw = [imagen_url, banner_url]
         imagenes = deduplicar_imagenes([i for i in imagenes_raw if i])[:2]
@@ -791,6 +817,9 @@ def obtener_anime_kitsu():
         episodios = attrs.get('episodeCount', 'N/A')
 
         titulo, sinopsis = traducir_y_adaptar(titulo, sinopsis, "noticia")
+        if titulo is None:
+            log("⛔ Kitsu descartado (inglés sin IA)", "debug")
+            return None
 
         cover = attrs.get('coverImage', {}) or {}
         imagenes_raw = [imagen_url, cover.get('original'), cover.get('large'), cover.get('small')]
@@ -882,6 +911,9 @@ def obtener_noticias_rss(tipo="noticia"):
                     continue
 
                 titulo, desc = traducir_y_adaptar(titulo, desc, tipo)
+                if titulo is None:
+                    log(f"⛔ RSS descartado (inglés sin IA)", "debug")
+                    continue
 
                 noticias.append({
                     'titulo': titulo,
@@ -1197,15 +1229,27 @@ def main():
             log(f"🚫 Candidato rechazado (persona real): {candidato['titulo'][:50]}", 'advertencia')
             continue
 
-        # Verificar y descargar imágenes
+        # Verificar y descargar imágenes — sin duplicados por contenido real
         imgs_validas = []
-        urls_imagenes = candidato.get('imagenes', [])
+        hashes_vistos = set()
+        urls_imagenes = deduplicar_imagenes(candidato.get('imagenes', []))
         if candidato.get('imagen') and candidato['imagen'] not in urls_imagenes:
             urls_imagenes.insert(0, candidato['imagen'])
+        urls_imagenes = deduplicar_imagenes(urls_imagenes)  # segunda pasada
 
         for img_url in urls_imagenes[:3]:
             img_pil = descargar_imagen_url(img_url)
             if img_pil:
+                # Hash visual: comparar thumbnail 8x8 para detectar imágenes idénticas
+                thumb = img_pil.resize((8, 8)).convert('L')
+                import struct
+                pixel_hash = hashlib.md5(thumb.tobytes()).hexdigest()[:12]
+                if pixel_hash in hashes_vistos:
+                    log(f"🖼️ Imagen duplicada (mismo contenido visual) — descartando", "debug")
+                    time.sleep(0.2)
+                    continue
+                hashes_vistos.add(pixel_hash)
+
                 path = preparar_imagen_facebook(
                     img_pil,
                     titulo=candidato['titulo'],
